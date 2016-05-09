@@ -13,7 +13,7 @@ from lxml.etree import XMLSyntaxError
 import socket
 import collections
 try:
-    from cStringIO import StringIO
+    from cStringIO import S/ngIO
 except:
     from StringIO import StringIO
 
@@ -23,16 +23,28 @@ import suds.metrics as metrics
 #from tests import *
 #from suds import WebFault
 #from suds.client import Client
-from suds.sax.text import Raw
-import suds.client as sudscl
+# from suds.sax.text import Raw
+# import suds.client as sudscl
+
+try:
+    from suds.client import Client
+except:
+    pass
+# from suds.transport.https import WindowsHttpAuthenticated
+# from suds.cache import ObjectCache
+
 # ejemplo de suds
 
 # intento con urllib3
-import urllib3
-from urllib3 import HTTPConnectionPool
+try:
+    import urllib3
+except:
+    pass
+
+# from urllib3 import HTTPConnectionPool
 pool = urllib3.PoolManager()
 
-from inspect import currentframe, getframeinfo
+# from inspect import currentframe, getframeinfo
 # estas 2 lineas son para imprimir el numero de linea del script
 # (solo para debug)
 
@@ -119,6 +131,19 @@ Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315" />\
 # hardcodeamos este valor por ahora
 import os
 xsdpath = os.path.dirname(os.path.realpath(__file__)).replace('/models','/static/xsd/')
+
+connection_status = {
+    '0': 'Upload OK',
+    '1': 'El Sender no tiene permiso para enviar',
+    '2': 'Error en tamaño del archivo (muy grande o muy chico)',
+    '3': 'Archivo cortado (tamaño <> al parámetro size)',
+    '5': 'No está autenticado',
+    '6': 'Empresa no autorizada a enviar archivos',
+    '7': 'Esquema Invalido',
+    '8': 'Firma del Documento',
+    '9': 'Sistema Bloqueado',
+    'Otro': 'Error Interno.',
+}
 
 class invoice(models.Model):
     _inherit = "account.invoice"
@@ -288,12 +313,13 @@ ordered scheme for sending packages to SII:')
                         signature_d['priv_key'].encode('ascii'))
 
                     _logger.info('Set DTE signed!')
-
+                    # todo: chequear que si no tengo firma, algun usuario del
                     signature = porcion_firma_documento.format(
                         "OdooBMyA20160510T1952", frmt['firma'], frmt['modulus'],
                         frmt['exponent'], signature_d['cert'])
 
                     # agrego validacion de firma
+
                     signature = signature if self.xml_validator(
                         signature, 'sig') else ''
 
@@ -309,36 +335,119 @@ version="1.0">{}{}</EnvioDTE>""".format(set_dte, signature)
                     print(envio_dte)
 
 
+                    try:
+                        if 1=1:
+                            # autenticacion - semilla /token
+                            # direccion del host
+                            # autenticacion con suds
+                            urlseed = 'https://maullin.sii.cl/DTEWS/CrSeed.jws?WSDL'
+                            # todo: tomar esta url del archivo de webservices
+                            client = Client(urlseed)
+                            seed_response = xmltodict.parse(
+                                client.service.getSeed())
+                            seed_value = seed_response['SII:RESPUESTA']['SII:RESP_BODY']['SEMILLA']
+                            # firmar la semilla
+                            seed_xml = '''<item>
+<Semilla>
+{}
+</Semilla>
+</item>'''.format(seed_value)
+                            frmt = self.signmessage(
+                                seed_xml.encode('ascii'),
+                                signature_d['priv_key'].encode('ascii'))
+
+                            xml_envelope = u'''<getToken>
+{0}
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
+<SignedInfo>
+<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
+<Reference URI="">
+<Transforms>
+<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+</Transforms>
+<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<DigestValue>
+{1}
+</DigestValue
+</Reference>
+</SignedInfo>
+<SignatureValue>
+{2}
+</SignatureValue>
+<KeyInfo>
+<KeyValue>
+<RSAKeyValue>
+<Modulus>
+{3}
+</Modulus>
+<Exponent>
+{4}
+</Exponent>
+</RSAKeyValue>
+</KeyValue>
+<X509Data>
+<X509Certificate/>
+</X509Data>
+</KeyInfo>
+</Signature>
+</getToken>
+'''.format(seed_xml, digest, frmt[''], frmt[''], frmt[''])
 
 
-                    # firmante del documento. Aca me tengo que involucrar con el
-                    # objeto del usuario (firma)
-                    # por ahora, firmo con mi propia firma.
-                    # todo: chequear que si no tengo firma, algun usuario del
-                    # sistema me está autorizando.
 
-
-                     # + inv.sii_xml_request
+#                            url = 'https://maullin.sii.cl'
+#                            post = '/cgi_dte/UPL/DTEUpload'
+#                            # port = 443
+#                            response = pool.urlopen('POST', url + post,
+#                                headers={
+#                                    'Accept': 'image/gif,image/x-xbitmap,\
+#image/jpeg,image/pjpeg,application/vnd.ms-powerpoint,application/ms-excel,\
+#application/msword,*/*',
+#                                    'Accept-Language': 'es-cl',
+#                                    'Accept-Encoding': 'gzip, deflate',
+#                                    'Content-Type': 'multipart/form-data: boundary={boundary d23e2a11301c4}',
+#                                    'charset': 'ISO-8859-1',
+#                                    'User-Agent': 'Mozilla/4.0 (compatible; PROG 1.0; Windows NT 5.0; YComp 5.0.2.4)',
+#                                    'Content-Length': '{len(envio_dte)}',
+#                                    'Referer': '{http://blancomartin.cl/enviodte}',
+#                                    'Cache-Control': 'no-cache',
+#                                    'Cookie': 'TOKEN = {auth}'
+#                                }, body=envio_dte)
 #
-#                    # aca seguramente la firma
-#                    # primero que nada le quito el tag que está sobre documento
-#                    documento = inv.sii_xml_request.replace(
-#                        """'<DTE xmlns = "http://www.sii.cl/SiiDte" version = "1.0" >""",
-#                        '').replace("""</DTE>""", '')
-#                    # ahora firmo
-#                    frmt = inv.signmessage(
-#                        documento, inv.get_digital_signature()['priv_key'])
-#                    print(frmt)
-#                    raise Warning(frmt)
 #
-#                try:
-#                    # realiza la transmisión
-#                    # exitosa...
-#                    inv.sii_xml_response = response.data
-#                    inv.sii_result = 'Enviado'
-#                except:
-#                    # no pudo hacer el envío
-#                    inv.sii_result = 'NoEnviado'
+#                            respuesta = '''<?xml version="1.0"?>
+#<RECEPCIONDTE>
+#<RUTSENDER>1-9</RUTSENDER>
+#<RUTCOMPANY>3-5</RUTCOMPANY>
+#<FILE>EnvioEjemplo.xml</FILE>
+#<TIMESTAMP>2002-11-25 18:51:44</TIMESTAMP>
+#<STATUS>0</STATUS>
+#<TRACKID>39</TRACKID>
+#</RECEPCIONDTE>'''
+#                            respuesta_dict = xmltodict.parse(respuesta)
+#
+#                            if respuesta_dict['RECEPCIONDTE']['STATUS']] != 0:
+#                                _logger.info(connection_status[
+#                                                 respuesta_dict['RECEPCIONDTE'][
+#                                                     'STATUS']])
+#                            else:
+#                                respuesta_dict['RECEPCIONDTE']['TRACKID']
+#
+                            # login
+                            # url de login con mi clave
+                            # devuelve token
+                            # con token transmite envio_dte
+
+                            # if ok: inv.sii_result = 'Enviado'
+                            pass
+                        else:
+                            raise Warning(connection_status[response.e])
+                    except:
+                        # no pudo hacer el envío
+                        inv.sii_result = 'NoEnviado'
+                        raise Warning('Error')
+
 
     # funcion para descargar el XML
     @api.multi
