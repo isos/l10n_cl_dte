@@ -13,7 +13,7 @@ from lxml.etree import XMLSyntaxError
 import socket
 import collections
 try:
-    from cStringIO import S/ngIO
+    from cStringIO import StringIO
 except:
     from StringIO import StringIO
 
