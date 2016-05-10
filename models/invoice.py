@@ -335,8 +335,8 @@ version="1.0">{}{}</EnvioDTE>""".format(set_dte, signature)
                     print(envio_dte)
 
 
-                    try:
-                        if 1=1:
+                    if 1==1:
+                        if 1==1:
                             # autenticacion - semilla /token
                             # direccion del host
                             # autenticacion con suds
@@ -352,11 +352,14 @@ version="1.0">{}{}</EnvioDTE>""".format(set_dte, signature)
 {}
 </Semilla>
 </item>'''.format(seed_value)
+
                             frmt = self.signmessage(
                                 seed_xml.encode('ascii'),
-                                signature_d['priv_key'].encode('ascii'))
+                                signature_d['priv_key'].encode('ascii'),
+                                digst='dgst')
 
-                            xml_envelope = u'''<getToken>
+                            xml_envelope = '''<?xml version='1.0' encoding='ISO-8859-1'?>
+<getToken>
 {0}
 <Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
 <SignedInfo>
@@ -387,13 +390,22 @@ version="1.0">{}{}</EnvioDTE>""".format(set_dte, signature)
 </RSAKeyValue>
 </KeyValue>
 <X509Data>
-<X509Certificate/>
+<X509Certificate>
+{5}
+</X509Certificate>
 </X509Data>
 </KeyInfo>
 </Signature>
 </getToken>
-'''.format(seed_xml, digest, frmt[''], frmt[''], frmt[''])
+'''.format(seed_xml, frmt['digest'], frmt['firma'], frmt['modulus'],
+           frmt['exponent'], signature_d['cert'])
 
+                            # _logger.info('Signature for getToken Validation..')
+                            # xml_envelope = xml_envelope if self.xml_validator(
+                            #     xml_envelope, 'sig') else ''
+                            # la validacion no es para el pedido de token sino
+                            # para la firma en sí.
+                            print(xml_envelope)
 
 
 #                            url = 'https://maullin.sii.cl'
@@ -443,7 +455,8 @@ version="1.0">{}{}</EnvioDTE>""".format(set_dte, signature)
                             pass
                         else:
                             raise Warning(connection_status[response.e])
-                    except:
+                    else:
+                        #except:
                         # no pudo hacer el envío
                         inv.sii_result = 'NoEnviado'
                         raise Warning('Error')
@@ -538,7 +551,7 @@ www.sii.cl'''.format(folio, folio_inicial, folio_final)
         sha1.update(data)
         return sha1.digest()
 
-    def signmessage(self, dd, privkey, pubk=''):
+    def signmessage(self, dd, privkey, pubk='', digst=''):
         ddd = self.digest(dd)
         CafPK = M2Crypto.RSA.load_key_string(privkey)
         firma = CafPK.sign(ddd)
@@ -561,11 +574,19 @@ www.sii.cl'''.format(folio, folio_inicial, folio_final)
         pubkey.verify_update(dd)
         _logger.info('Validating public key using EVP PK verification....')
         if pubkey.verify_final(firma) == 1:
-            _logger.info("""Signature verified! Returning signature, modulus \
+            if digst=='':
+                _logger.info("""Signature verified! Returning signature, modulus \
 and exponent.""")
-            return {
-                'firma': FRMT, 'modulus': base64.b64encode(rsa.n),
-                'exponent': base64.b64encode(rsa.e)}
+                return {
+                    'firma': FRMT, 'modulus': base64.b64encode(rsa.n),
+                    'exponent': base64.b64encode(rsa.e)}
+            else:
+                _logger.info("""Signature verified! Returning signature, modulus \
+    and exponent. AND DIGEST""")
+                return {
+                    'firma': FRMT, 'modulus': base64.b64encode(rsa.n),
+                    'exponent': base64.b64encode(rsa.e),
+                    'digest': base64.b64encode(ddd)}
 
     sii_batch_number = fields.Integer(
         copy=False,
