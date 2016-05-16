@@ -47,7 +47,9 @@ Chile: API and GUI to access Electronic Invoicing webservices.
             'hashlib',
             'cchardet',
             'suds',
-            'urllib3'
+            'urllib3',
+            'SOAPpy',
+            'dm.xmlsec.binding'
         ]
     },
     'data': [

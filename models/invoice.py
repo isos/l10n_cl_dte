@@ -12,11 +12,6 @@ from lxml import objectify
 from lxml.etree import XMLSyntaxError
 
 
-
-from M2Crypto import RSA, EVP
-
-
-
 import socket
 import collections
 try:
@@ -91,6 +86,17 @@ try:
     import cchardet
 except ImportError:
     _logger.info('Cannot import hashlib library')
+
+try:
+    from SOAPpy import SOAPProxy
+except ImportError:
+    _logger.info('Cannot import SOOAPpy')
+
+try:
+    import dm.xmlsec.binding as xmlsec
+    xmlsec.initialize()
+except ImportError:
+    _logger.info('Cannot import SOOAPpy')
 
 # timbre patrón. Permite parsear y formar el
 # ordered-dict patrón corespondiente al documento
@@ -341,36 +347,36 @@ version="1.0">{}{}</EnvioDTE>""".format(set_dte, signature)
                         envio_dte, 'env') else ''
                     print(envio_dte)
 
-
+                ###### comienzo de bloque de autenticacion #########
+                if 1==1:
                     if 1==1:
-                        if 1==1:
-                            # autenticacion - semilla /token
-                            # direccion del host
-                            # autenticacion con suds
-                            urlseed = 'https://maullin.sii.cl/DTEWS/CrSeed.jws?WSDL'
-                            # todo: tomar esta url del archivo de webservices
-                            client = Client(urlseed)
-                            try:
-                                seed_response = xmltodict.parse(
-                                    client.service.getSeed())
-                            except e:
-                                raise Warning(_('Could not get seed: %s' % e))
-                            seed_value = seed_response['SII:RESPUESTA']['SII:RESP_BODY']['SEMILLA']
-                            # seed_value = '002224351254'
-                            # firmar la semilla
-                            seed_xml = '''{}'''.format(
-                                seed_value)
-                            #seed_get_t = '''<getToken>{}</getToken>'''.format(
-                            #    seed_xml)
+                        # autenticacion - semilla /token
+                        # direccion del host
+                        # autenticacion con suds
+                        urlseed = 'https://maullin.sii.cl/DTEWS/CrSeed.jws?WSDL'
+                        # todo: tomar esta url del archivo de webservices
+                        client = Client(urlseed)
+                        try:
+                            seed_response = xmltodict.parse(
+                                client.service.getSeed())
+                        except e:
+                            raise Warning(_('Could not get seed: %s' % e))
+                        seed_value = seed_response['SII:RESPUESTA']['SII:RESP_BODY']['SEMILLA']
+                        # seed_value = '002224351254'
+                        # firmar la semilla
+                        seed_xml = '''{}'''.format(
+                            seed_value)
+                        #seed_get_t = '''<getToken>{}</getToken>'''.format(
+                        #    seed_xml)
 
-                            frmt = self.signmessage(
-                                seed_xml,
-                                signature_d['priv_key'].encode('ascii'),
-                                digst='dgst')
+                        frmt = self.signmessage(
+                            seed_xml,
+                            signature_d['priv_key'].encode('ascii'),
+                            digst='dgst')
 
-                            print(signature_d['priv_key'])
-                            print(frmt)
-                            xml_envelope = u'''<?xml version='1.0' encoding='ISO-8859-1'?>
+                        print(signature_d['priv_key'])
+                        print(frmt)
+                        xml_envelope = u'''<?xml version='1.0' encoding='ISO-8859-1'?>
 <getToken>
 <item>
 <Semilla>{0}</Semilla>
@@ -407,32 +413,34 @@ version="1.0">{}{}</EnvioDTE>""".format(set_dte, signature)
 </Signature>
 </getToken>
 '''.format(seed_xml, frmt['digest'], frmt['firma'], frmt['modulus'],
-           frmt['exponent'], signature_d['cert'])
-                            #xml_envelope = self.convert_encoding(
-                            #    xml_envelope, 'ISO-8859-1')
+       frmt['exponent'], signature_d['cert'])
+                        #xml_envelope = self.convert_encoding(
+                        #    xml_envelope, 'ISO-8859-1')
 
-                            # _logger.info('Signature for getToken Validation..')
-                            # xml_envelope = xml_envelope if self.xml_validator(
-                            #     xml_envelope, 'sig') else ''
-                            # la validacion no es para el pedido de token sino
-                            # para la firma en sí.
-                            print(xml_envelope)
-                            # raise Warning('check!')
-                            urltoken = 'https://maullin.sii.cl/DTEWS/GetTokenFromSeed.jws?WSDL'
-                            # todo: tomar esta url del archivo de webservices
-                            # tree = etree.parse(StringIO(xml_envelope))
-                            # write_file = StringIO()
-                            # tree.write(write_file, xml_declaration=True,
-                            #            encoding='iso-8859-1')
-                            # ss = etree.tostring(write_file, pretty_print=True,
-                            #                 encoding='iso-8859-1')
+                        # _logger.info('Signature for getToken Validation..')
+                        # xml_envelope = xml_envelope if self.xml_validator(
+                        #     xml_envelope, 'sig') else ''
+                        # la validacion no es para el pedido de token sino
+                        # para la firma en sí.
+                        print(xml_envelope)
+                        # raise Warning('check!')
+                        urltoken = 'https://maullin.sii.cl/DTEWS/GetTokenFromSeed.jws?WSDL'
+                        # todo: tomar esta url del archivo de webservices
+                        # tree = etree.parse(StringIO(xml_envelope))
+                        # write_file = StringIO()
+                        # tree.write(write_file, xml_declaration=True,
+                        #            encoding='iso-8859-1')
+                        # ss = etree.tostring(write_file, pretty_print=True,
+                        #                 encoding='iso-8859-1')
 
-                            client = Client(urltoken)
-                            response = client.service.getToken(xml_envelope)
-                            print(response)
-                            token_response = xmltodict.parse(response)
-                            print(token_response)
-                            print('TOOOOOOKEEEEEEN!!!!!!!!')
+                        client = Client(urltoken)
+                        response = client.service.getToken(xml_envelope)
+                        print(response)
+                        token_response = xmltodict.parse(response)
+                        print(token_response)
+                        print('TOOOOOOKEEEEEEN!!!!!!!!')
+                        ###### fin de bloque de autenticacion #########
+
 #                            url = 'https://maullin.sii.cl'
 #                            post = '/cgi_dte/UPL/DTEUpload'
 #                            # port = 443
