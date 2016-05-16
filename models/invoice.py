@@ -350,8 +350,11 @@ version="1.0">{}{}</EnvioDTE>""".format(set_dte, signature)
                             urlseed = 'https://maullin.sii.cl/DTEWS/CrSeed.jws?WSDL'
                             # todo: tomar esta url del archivo de webservices
                             client = Client(urlseed)
-                            seed_response = xmltodict.parse(
-                                client.service.getSeed())
+                            try:
+                                seed_response = xmltodict.parse(
+                                    client.service.getSeed())
+                            except e:
+                                raise Warning(_('Could not get seed: %s' % e))
                             seed_value = seed_response['SII:RESPUESTA']['SII:RESP_BODY']['SEMILLA']
                             # seed_value = '002224351254'
                             # firmar la semilla
@@ -592,7 +595,7 @@ and exponent.""")
 exponent. AND DIGEST""")
             return {
                 'firma': FRMT, 'modulus': base64.b64encode(rsa_m.n),
-                'exponent': base64.b64encode(rsa_m.e)}
+                'exponent': base64.b64encode(rsa_m.e),
                 'digest': base64.b64encode(self.digest(MESSAGE))}
 
     def signmessage1(self, dd, privkey, pubk='', digst=''):
