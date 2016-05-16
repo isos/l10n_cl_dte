@@ -10,6 +10,13 @@ import logging
 import lxml.etree as etree
 from lxml import objectify
 from lxml.etree import XMLSyntaxError
+
+
+
+from M2Crypto import RSA, EVP
+
+
+
 import socket
 import collections
 try:
@@ -346,21 +353,25 @@ version="1.0">{}{}</EnvioDTE>""".format(set_dte, signature)
                             seed_response = xmltodict.parse(
                                 client.service.getSeed())
                             seed_value = seed_response['SII:RESPUESTA']['SII:RESP_BODY']['SEMILLA']
+                            # seed_value = '002224351254'
                             # firmar la semilla
-                            seed_xml = '''<item>
-<Semilla>
-{}
-</Semilla>
-</item>'''.format(seed_value)
+                            seed_xml = '''{}'''.format(
+                                seed_value)
+                            #seed_get_t = '''<getToken>{}</getToken>'''.format(
+                            #    seed_xml)
 
                             frmt = self.signmessage(
-                                seed_xml.encode('ascii'),
+                                seed_xml,
                                 signature_d['priv_key'].encode('ascii'),
                                 digst='dgst')
 
-                            xml_envelope = '''<?xml version='1.0' encoding='ISO-8859-1'?>
+                            print(signature_d['priv_key'])
+                            print(frmt)
+                            xml_envelope = u'''<?xml version='1.0' encoding='ISO-8859-1'?>
 <getToken>
-{0}
+<item>
+<Semilla>{0}</Semilla>
+</item>
 <Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
 <SignedInfo>
 <CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
@@ -370,14 +381,10 @@ version="1.0">{}{}</EnvioDTE>""".format(set_dte, signature)
 <Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
 </Transforms>
 <DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
-<DigestValue>
-{1}
-</DigestValue
+<DigestValue>{1}</DigestValue>
 </Reference>
 </SignedInfo>
-<SignatureValue>
-{2}
-</SignatureValue>
+<SignatureValue>{2}</SignatureValue>
 <KeyInfo>
 <KeyValue>
 <RSAKeyValue>
@@ -390,15 +397,16 @@ version="1.0">{}{}</EnvioDTE>""".format(set_dte, signature)
 </RSAKeyValue>
 </KeyValue>
 <X509Data>
-<X509Certificate>
-{5}
-</X509Certificate>
+
+<X509Certificate>{5}</X509Certificate>
 </X509Data>
 </KeyInfo>
 </Signature>
 </getToken>
 '''.format(seed_xml, frmt['digest'], frmt['firma'], frmt['modulus'],
            frmt['exponent'], signature_d['cert'])
+                            #xml_envelope = self.convert_encoding(
+                            #    xml_envelope, 'ISO-8859-1')
 
                             # _logger.info('Signature for getToken Validation..')
                             # xml_envelope = xml_envelope if self.xml_validator(
@@ -406,8 +414,22 @@ version="1.0">{}{}</EnvioDTE>""".format(set_dte, signature)
                             # la validacion no es para el pedido de token sino
                             # para la firma en sí.
                             print(xml_envelope)
+                            # raise Warning('check!')
+                            urltoken = 'https://maullin.sii.cl/DTEWS/GetTokenFromSeed.jws?WSDL'
+                            # todo: tomar esta url del archivo de webservices
+                            # tree = etree.parse(StringIO(xml_envelope))
+                            # write_file = StringIO()
+                            # tree.write(write_file, xml_declaration=True,
+                            #            encoding='iso-8859-1')
+                            # ss = etree.tostring(write_file, pretty_print=True,
+                            #                 encoding='iso-8859-1')
 
-
+                            client = Client(urltoken)
+                            response = client.service.getToken(xml_envelope)
+                            print(response)
+                            token_response = xmltodict.parse(response)
+                            print(token_response)
+                            print('TOOOOOOKEEEEEEN!!!!!!!!')
 #                            url = 'https://maullin.sii.cl'
 #                            post = '/cgi_dte/UPL/DTEUpload'
 #                            # port = 443
@@ -551,7 +573,29 @@ www.sii.cl'''.format(folio, folio_inicial, folio_final)
         sha1.update(data)
         return sha1.digest()
 
-    def signmessage(self, dd, privkey, pubk='', digst=''):
+    def signmessage(self, MESSAGE, KEY, pubk='', digst=''):
+        rsa = M2Crypto.EVP.load_key_string(KEY)
+        rsa.reset_context(md='sha1')
+        rsa_m = rsa.get_rsa()
+        rsa.sign_init()
+        rsa.sign_update(MESSAGE)
+        FRMT = base64.b64encode(rsa.sign_final())
+        _logger.info('Document signature in base64: %s' % FRMT)
+        if digst == '':
+            _logger.info("""Signature verified! Returning signature, modulus \
+and exponent.""")
+            return {
+                'firma': FRMT, 'modulus': base64.b64encode(rsa_m.n),
+                'exponent': base64.b64encode(rsa_m.e)}
+        else:
+            _logger.info("""Signature verified! Returning signature, modulus, \
+exponent. AND DIGEST""")
+            return {
+                'firma': FRMT, 'modulus': base64.b64encode(rsa_m.n),
+                'exponent': base64.b64encode(rsa_m.e)}
+                'digest': base64.b64encode(self.digest(MESSAGE))}
+
+    def signmessage1(self, dd, privkey, pubk='', digst=''):
         ddd = self.digest(dd)
         CafPK = M2Crypto.RSA.load_key_string(privkey)
         firma = CafPK.sign(ddd)
