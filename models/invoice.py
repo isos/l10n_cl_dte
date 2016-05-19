@@ -11,9 +11,9 @@ import lxml.etree as etree
 from lxml import objectify
 from lxml.etree import XMLSyntaxError
 
-
 import socket
 import collections
+
 try:
     from cStringIO import StringIO
 except:
@@ -116,30 +116,36 @@ result = xmltodict.parse(timbre)
 
 porcion_firma_documento = """\
 <Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
-<SignedInfo><CanonicalizationMethod \
-Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315" />\
-<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1" />\
-<Reference URI="#{0}"><Transforms>\
-<Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315" />\
-</Transforms>\
-<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1" />\
-<DigestValue>Zi6zVjBT/xgMNdAMmZuOlxdWo7s=</DigestValue></Reference>\
+<SignedInfo>
+<CanonicalizationMethod \
+Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315" />
+<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1" />
+<Reference URI="#{0}">
+<Transforms>
+<Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315" />
+</Transforms>
+<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1" />
+<DigestValue>{1}</DigestValue>
+</Reference>
 </SignedInfo>
-<SignatureValue>{1}</SignatureValue>
+<SignatureValue>{2}</SignatureValue>
 <KeyInfo>
 <KeyValue>
 <RSAKeyValue>
-<Modulus>{2}</Modulus>
-<Exponent>{3}</Exponent>
+<Modulus>{3}</Modulus>
+<Exponent>{4}</Exponent>
 </RSAKeyValue>
 </KeyValue>
 <X509Data>
 <X509Certificate>
-{4}
+{5}
 </X509Certificate>
 </X509Data>
 </KeyInfo>
-</Signature>"""
+</Signature>
+"""
+
+server_url = 'https://maullin.sii.cl/DTEWS/'
 
 # hardcodeamos este valor por ahora
 import os
@@ -160,6 +166,13 @@ connection_status = {
 
 class invoice(models.Model):
     _inherit = "account.invoice"
+
+    def remove_indents(self, xml):
+        return xml.replace(
+            '        <','<').replace(
+            '      <','<').replace(
+            '    <','<').replace(
+            '  <','<')
 
     def whatisthis(self, s):
         if isinstance(s, str):
@@ -187,6 +200,89 @@ class invoice(models.Model):
                 _logger.info(_("The Document XML file has error: %s") % e.args)
                 raise Warning(_('XML Malformed Error %s') % e.args)
 
+    ### funciones usadas en la autenticacion
+    def get_seed(self):
+        url = server_url + 'CrSeed.jws?WSDL'
+        ns = 'urn:'+server_url + 'CrSeed.jws'
+        _server = SOAPProxy(url, ns)
+        root = etree.fromstring(_server.getSeed())
+        semilla = root[0][0].text
+        return semilla
+
+    def create_template_seed(self, seed):
+        xml = u'''<getToken>
+<item>
+<Semilla>{}</Semilla>
+</item>
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
+<SignedInfo>
+<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
+<Reference URI="">
+<Transforms>
+<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+</Transforms>
+<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<DigestValue/>
+</Reference>
+</SignedInfo>
+<SignatureValue/>
+<KeyInfo>
+<KeyValue>
+<RSAKeyValue>
+<Modulus/>
+<Exponent/>
+</RSAKeyValue>
+</KeyValue>
+<X509Data>
+<X509Certificate/>
+</X509Data>
+</KeyInfo>
+</Signature>
+</getToken>'''.format(seed)
+        # Debug
+        print(xml)
+        return xml
+
+    def sign_seed(self, message, privkey, cert_file):
+        doc = etree.fromstring(message)
+        node = xmlsec.findNode(doc, xmlsec.dsig("Signature"))
+        dsigCtx = xmlsec.DSigCtx()
+        signKey = xmlsec.Key.loadMemory(privkey, xmlsec.KeyDataFormatPem, "")
+        signKey.loadCert(cert_file, xmlsec.KeyDataFormatPem)
+        dsigCtx.signKey = signKey
+        dsigCtx.sign(node)
+        return etree.tostring(doc)
+
+    def get_token(self, seed_file):
+        url = server_url + 'GetTokenFromSeed.jws?WSDL'
+        ns = 'urn:'+ server_url +'GetTokenFromSeed.jws'
+        _server = SOAPProxy(url, ns)
+        tree = etree.fromstring(seed_file)
+        ss = etree.tostring(tree, pretty_print=True, encoding='iso-8859-1')
+        respuesta = etree.fromstring(_server.getToken(ss))
+        token = respuesta[0][0].text
+        return token
+
+    def get_digital_signature_pem(self, comp_id):
+        _logger.info(_('Executing digital signature function in PEM format'))
+        _logger.info('Service provider for this company is %s' % comp_id)
+        if comp_id.dte_service_provider in ['SIIHOMO', 'SII']:
+            user_obj = self.env['res.users'].browse([self.env.user.id])
+            signature_data = {
+                'subject_name': user_obj.name,
+                'subject_serial_number': user_obj.subject_serial_number,
+                'priv_key': user_obj.priv_key,
+                'cert': user_obj.cert}
+            _logger.info('The signature data is the following %s' % signature_data)
+            # todo: chequear si el usuario no tiene firma, si esta autorizado por otro usuario
+            return signature_data
+        else:
+            return ''
+
+    ### fin de funciones usadas en autenticacion
+
+
     def get_digital_signature(self, comp_id):
         _logger.info(_('Executing digital signature function'))
         _logger.info('Service provider for this company is %s' % comp_id)
@@ -209,8 +305,8 @@ class invoice(models.Model):
         _logger.info('Entering function get_resolution_data')
         _logger.info('Service provider for this company is %s' % comp_id)
         if comp_id.dte_service_provider == 'SIIHOMO':
-            resolution_date = '2016-03-01'
-            resolution_numb = '82'
+            resolution_date = '2014-01-01'
+            resolution_numb = '80'
             _logger.info('Using hardcoded resolution date and resolution \
 number for Certification process')
         else:
@@ -294,11 +390,11 @@ ordered scheme for sending packages to SII:')
                     caratd = collections.OrderedDict()
                     caratd['Caratula'] = caratula
                     # transformacińo de la caratula en xml
-                    caratxml_pret = etree.tostring(
+                    caratxml_pret = self.remove_indents(etree.tostring(
                         etree.XML(dicttoxml.dicttoxml(
                             caratd, root=False, attr_type=False)),
                             pretty_print=True).replace(
-                            '<Caratula>', '<Caratula version="1.0">')
+                            '<Caratula>', '<Caratula version="1.0">'))
                     # raise Warning(caratxml_pret)
                     _logger.info("Envelope for sending documents:")
                     print(caratxml_pret)
@@ -313,8 +409,10 @@ ordered scheme for sending packages to SII:')
 
                     # ya tengo la caratula y el set de documentos a enviar.
                     # lo que hago es meterlos en el set_dte
-                    set_dte = '<SetDTE ID="OdooBMyA20160510T1952">\n\
-{}{}\n</SetDTE>'.format(caratxml_pret, invoices_to_send)
+                    set_dte = '''
+<SetDTE ID="OdooBMyA">
+{}{}
+</SetDTE>'''.format(caratxml_pret, invoices_to_send)
                     print(set_dte)
                     # este set de envio lo tengo que firmar
                     # ahora firmo
@@ -323,16 +421,20 @@ ordered scheme for sending packages to SII:')
 
                     frmt = self.signmessage(
                         set_dte.encode('ascii'),
-                        signature_d['priv_key'].encode('ascii'))
+                        signature_d['priv_key'].encode('ascii'),'','dgst')
 
                     _logger.info('Set DTE signed!')
                     # todo: chequear que si no tengo firma, algun usuario del
                     signature = porcion_firma_documento.format(
-                        "OdooBMyA20160510T1952", frmt['firma'], frmt['modulus'],
-                        frmt['exponent'], signature_d['cert'])
+                        "OdooBMyA",
+                        frmt['digest'],
+                        frmt['firma'],
+                        frmt['modulus'],
+                        frmt['exponent'],
+                        signature_d['cert'])
 
                     # agrego validacion de firma
-
+                    print('VALIDACION DE FIRMA')
                     signature = signature if self.xml_validator(
                         signature, 'sig') else ''
 
@@ -346,153 +448,56 @@ version="1.0">{}{}</EnvioDTE>""".format(set_dte, signature)
                     envio_dte = envio_dte if self.xml_validator(
                         envio_dte, 'env') else ''
                     print(envio_dte)
+                    ## aca hay una decision importante que tomar:
+                    # si quiero guardar el envio de toda la remesa en todas
+                    # las facturas que se envian en esa remesa,
+                    # o si solo dejo la porcion <DTE> del documento.
+                    # Si dejo solo el DTE, no puedo descargar el documento
+                    # enviarlo para testeo al SII
+                    # por ahora, lo guardare en el ultimo documento de la remesa
+                    # para poder testear la validez del documento.
+
+                    invoice_obj.sii_xml_request = envio_dte
 
                 ###### comienzo de bloque de autenticacion #########
+                ### Hipótesis: un envío por cada RUT de receptor ###
                 if 1==1:
                     if 1==1:
-                        # autenticacion - semilla /token
-                        # direccion del host
-                        # autenticacion con suds
-                        urlseed = 'https://maullin.sii.cl/DTEWS/CrSeed.jws?WSDL'
-                        # todo: tomar esta url del archivo de webservices
-                        client = Client(urlseed)
-                        try:
-                            seed_response = xmltodict.parse(
-                                client.service.getSeed())
-                        except e:
-                            raise Warning(_('Could not get seed: %s' % e))
-                        seed_value = seed_response['SII:RESPUESTA']['SII:RESP_BODY']['SEMILLA']
-                        # seed_value = '002224351254'
-                        # firmar la semilla
-                        seed_xml = '''{}'''.format(
-                            seed_value)
-                        #seed_get_t = '''<getToken>{}</getToken>'''.format(
-                        #    seed_xml)
+                        # tengo que sacar de algun lado las claves
+                        signature_d = self.get_digital_signature_pem(
+                            self.company_id)
+                        # signature_d = {
+                        #     'subject_name': user_obj.name,
+                        #     'subject_serial_number': user_obj.subject_serial_number,
+                        #     'priv_key': user_obj.priv_key,
+                        #     'cert': user_obj.cert}
 
-                        frmt = self.signmessage(
-                            seed_xml,
-                            signature_d['priv_key'].encode('ascii'),
-                            digst='dgst')
+                        file = open(xsdpath+'mycert.pem', 'w')
+                        file.write(signature_d['cert'])
+                        file.close()
+                        seed = self.get_seed()
+                        _logger.info(_("Seed is: {}").format(seed))
+                        template_string = self.create_template_seed(seed)
+                        seed_firmado = self.sign_seed(
+                            template_string, signature_d['priv_key'], xsdpath+"mycert.pem")
+                        token = self.get_token(seed_firmado)
+                        _logger.info(_("Token is: {}").format(token))
 
-                        print(signature_d['priv_key'])
-                        print(frmt)
-                        xml_envelope = u'''<?xml version='1.0' encoding='ISO-8859-1'?>
-<getToken>
-<item>
-<Semilla>{0}</Semilla>
-</item>
-<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
-<SignedInfo>
-<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
-<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
-<Reference URI="">
-<Transforms>
-<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
-</Transforms>
-<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
-<DigestValue>{1}</DigestValue>
-</Reference>
-</SignedInfo>
-<SignatureValue>{2}</SignatureValue>
-<KeyInfo>
-<KeyValue>
-<RSAKeyValue>
-<Modulus>
-{3}
-</Modulus>
-<Exponent>
-{4}
-</Exponent>
-</RSAKeyValue>
-</KeyValue>
-<X509Data>
-
-<X509Certificate>{5}</X509Certificate>
-</X509Data>
-</KeyInfo>
-</Signature>
-</getToken>
-'''.format(seed_xml, frmt['digest'], frmt['firma'], frmt['modulus'],
-       frmt['exponent'], signature_d['cert'])
-                        #xml_envelope = self.convert_encoding(
-                        #    xml_envelope, 'ISO-8859-1')
-
-                        # _logger.info('Signature for getToken Validation..')
-                        # xml_envelope = xml_envelope if self.xml_validator(
-                        #     xml_envelope, 'sig') else ''
-                        # la validacion no es para el pedido de token sino
-                        # para la firma en sí.
-                        print(xml_envelope)
-                        # raise Warning('check!')
-                        urltoken = 'https://maullin.sii.cl/DTEWS/GetTokenFromSeed.jws?WSDL'
-                        # todo: tomar esta url del archivo de webservices
-                        # tree = etree.parse(StringIO(xml_envelope))
-                        # write_file = StringIO()
-                        # tree.write(write_file, xml_declaration=True,
-                        #            encoding='iso-8859-1')
-                        # ss = etree.tostring(write_file, pretty_print=True,
-                        #                 encoding='iso-8859-1')
-
-                        client = Client(urltoken)
-                        response = client.service.getToken(xml_envelope)
-                        print(response)
-                        token_response = xmltodict.parse(response)
-                        print(token_response)
-                        print('TOOOOOOKEEEEEEN!!!!!!!!')
-                        ###### fin de bloque de autenticacion #########
-
-#                            url = 'https://maullin.sii.cl'
-#                            post = '/cgi_dte/UPL/DTEUpload'
-#                            # port = 443
-#                            response = pool.urlopen('POST', url + post,
-#                                headers={
-#                                    'Accept': 'image/gif,image/x-xbitmap,\
-#image/jpeg,image/pjpeg,application/vnd.ms-powerpoint,application/ms-excel,\
-#application/msword,*/*',
-#                                    'Accept-Language': 'es-cl',
-#                                    'Accept-Encoding': 'gzip, deflate',
-#                                    'Content-Type': 'multipart/form-data: boundary={boundary d23e2a11301c4}',
-#                                    'charset': 'ISO-8859-1',
-#                                    'User-Agent': 'Mozilla/4.0 (compatible; PROG 1.0; Windows NT 5.0; YComp 5.0.2.4)',
-#                                    'Content-Length': '{len(envio_dte)}',
-#                                    'Referer': '{http://blancomartin.cl/enviodte}',
-#                                    'Cache-Control': 'no-cache',
-#                                    'Cookie': 'TOKEN = {auth}'
-#                                }, body=envio_dte)
-#
-#
-#                            respuesta = '''<?xml version="1.0"?>
-#<RECEPCIONDTE>
-#<RUTSENDER>1-9</RUTSENDER>
-#<RUTCOMPANY>3-5</RUTCOMPANY>
-#<FILE>EnvioEjemplo.xml</FILE>
-#<TIMESTAMP>2002-11-25 18:51:44</TIMESTAMP>
-#<STATUS>0</STATUS>
-#<TRACKID>39</TRACKID>
-#</RECEPCIONDTE>'''
-#                            respuesta_dict = xmltodict.parse(respuesta)
-#
-#                            if respuesta_dict['RECEPCIONDTE']['STATUS']] != 0:
-#                                _logger.info(connection_status[
-#                                                 respuesta_dict['RECEPCIONDTE'][
-#                                                     'STATUS']])
-#                            else:
-#                                respuesta_dict['RECEPCIONDTE']['TRACKID']
-#
-                            # login
-                            # url de login con mi clave
-                            # devuelve token
-                            # con token transmite envio_dte
-
-                            # if ok: inv.sii_result = 'Enviado'
-                            pass
-                        else:
-                            raise Warning(connection_status[response.e])
                     else:
-                        #except:
-                        # no pudo hacer el envío
-                        inv.sii_result = 'NoEnviado'
-                        raise Warning('Error')
+                        raise Warning(connection_status[response.e])
+                else:
+                    #except:
+                    # no pudo hacer el envío
+                    inv.sii_result = 'NoEnviado'
+                    raise Warning('Error')
+                ######### fin de bloque de autenticacion ###########
+
+                ########### inicio del bloque de envio #############
+                ###
+                pass
+                ###
+                ############# fin del bloque de envio ##############
+
 
 
     # funcion para descargar el XML
@@ -747,14 +752,21 @@ and exponent.""")
             keypub = (resultcaf['AUTORIZACION']['RSAPUBK']).encode(
                 'latin-1').replace('\t','')
             #####
+            ## antes de firmar, formatear
+            root = etree.XML( ddxml )
+            ddxml = self.remove_indents(
+                (etree.tostring(root, pretty_print=True)))
+            ##
             frmt = inv.signmessage(ddxml, keypriv, keypub)['firma']
 
             ted = (
-                '''<TED version="1.0">{}<FRMT algoritmo="SHA1withRSA">{}\
-</FRMT></TED>''').format(ddxml, frmt)
+                '''<TED version="1.0">
+{}<FRMT algoritmo="SHA1withRSA">{}</FRMT>
+</TED>''').format(ddxml, frmt)
             ted1 = (
-                 '''<TED version="1.0">{0}<FRMT algoritmo="SHA1withRSA">{1}\
- </FRMT></TED>''').format(ddxml, frmt)
+                 '''<TED version="1.0">
+{0}<FRMT algoritmo="SHA1withRSA">{1}</FRMT>
+</TED>''').format(ddxml, frmt)
             _logger.info(ted)
             root = etree.XML(ted)
             # inv.sii_barcode = (etree.tostring(root, pretty__logger.info=True))
@@ -770,6 +782,7 @@ and exponent.""")
 
     @api.multi
     def do_dte_send_invoice(self):
+
         try:
             signature_d = self.get_digital_signature(self.company_id)
         except:
@@ -787,6 +800,10 @@ and exponent.""")
 
         cant_doc_batch = 0
         for inv in self.with_context(lang='es_CL'):
+            # control de DTE
+            if inv.sii_document_class_id.dte == False:
+                continue
+            # control de DTE
             cant_doc_batch = cant_doc_batch + 1
             dte_service = inv.company_id.dte_service_provider
 
@@ -819,10 +836,11 @@ and exponent.""")
                     lines['CdgItem']['TpoCodigo'] = 'INT1'
                     lines['CdgItem']['VlrCodigo'] = line.product_id.default_code
                 lines['NmbItem'] = line.name
+                # todo: DscItem opcional (no está)
                 lines['QtyItem'] = int(round(line.quantity, 0))
-                lines['PrcItem'] = int(round(line.price_unit, 0))
-                # lines['UnmdItem'] = line.uos_id.name[:4]
+                # todo: opcional lines['UnmdItem'] = line.uos_id.name[:4]
                 # lines['UnmdItem'] = 'unid'
+                lines['PrcItem'] = int(round(line.price_unit, 0))
                 if line.discount != 0:
                     lines['DscItem'] = int(round(line.discount, 0))
                 lines['MontoItem'] = int(round(line.price_subtotal, 0))
@@ -841,6 +859,7 @@ and exponent.""")
             dte['Encabezado']['IdDoc']['TipoDTE'] = inv.sii_document_class_id.sii_code
             dte['Encabezado']['IdDoc']['Folio'] = folio
             dte['Encabezado']['IdDoc']['FchEmis'] = inv.date_invoice
+            # todo: forma de pago y fecha de vencimiento - opcional
             dte['Encabezado']['IdDoc']['FmaPago'] = inv.payment_term.dte_sii_code or 1
             dte['Encabezado']['IdDoc']['FchVenc'] = inv.date_due
             dte['Encabezado']['Emisor'] = collections.OrderedDict()
@@ -848,9 +867,14 @@ and exponent.""")
                 inv.company_id.vat)
             dte['Encabezado']['Emisor']['RznSoc'] = inv.company_id.name
             dte['Encabezado']['Emisor']['GiroEmis'] = inv.turn_issuer.name[:80]
+            # todo: Telefono y Correo opcional
             dte['Encabezado']['Emisor']['Telefono'] = inv.company_id.phone or ''
             dte['Encabezado']['Emisor']['CorreoEmisor'] = inv.company_id.dte_email
             dte['Encabezado']['Emisor']['item'] = giros_emisor # giros de la compañia - codigos
+            # todo: <CdgSIISucur>077063816</CdgSIISucur> codigo de sucursal
+            # no obligatorio si no hay sucursal, pero es un numero entregado
+            # por el SII para cada sucursal.
+            # este deberia agregarse al "punto de venta" el cual ya esta
             dte['Encabezado']['Emisor']['DirOrigen'] = inv.company_id.street
             dte['Encabezado']['Emisor']['CmnaOrigen'] = inv.company_id.state_id.name
             dte['Encabezado']['Emisor']['CiudadOrigen'] = inv.company_id.city
@@ -860,6 +884,7 @@ and exponent.""")
             dte['Encabezado']['Receptor']['RznSocRecep'] = inv.partner_id.name
             dte['Encabezado']['Receptor']['GiroRecep'] = inv.invoice_turn.name[:40]
             dte['Encabezado']['Receptor']['DirRecep'] = inv.partner_id.street
+            # todo: revisar comuna: "false"
             dte['Encabezado']['Receptor']['CmnaRecep'] = inv.partner_id.state_id.name
             dte['Encabezado']['Receptor']['CiudadRecep'] = inv.partner_id.city
             dte['Encabezado']['Totales'] = collections.OrderedDict()
@@ -896,9 +921,9 @@ and exponent.""")
                 xml = xml.replace('<TEDd>TEDTEDTED</TEDd>', ted1 + time)
 
             root = etree.XML( xml )
-            xml_pret = (etree.tostring(root, pretty_print=True)).replace(
+            xml_pret = self.remove_indents((etree.tostring(root, pretty_print=True)).replace(
                     '<Documento_ID>', doc_id).replace(
-                    '</Documento_ID>', '</Documento>')
+                    '</Documento_ID>', '</Documento>'))
 
             # _logger.info(xml_pret)
             # en xml_pret está el xml que me interesa
@@ -912,48 +937,26 @@ and exponent.""")
                 inv.sii_result = 'NoEnviado'
 
                 # ACA INCORPORO EL RESTO DE LA FIRMA
-                porcion_firma_documento = """\
-<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
-<SignedInfo><CanonicalizationMethod \
-Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315" />\
-<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1" />\
-<Reference URI="#{0}"><Transforms>\
-<Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315" />\
-</Transforms>\
-<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1" />\
-<DigestValue>Zi6zVjBT/xgMNdAMmZuOlxdWo7s=</DigestValue></Reference>\
-</SignedInfo>
-<SignatureValue>{1}</SignatureValue>
-<KeyInfo>
-<KeyValue>
-<RSAKeyValue>
-<Modulus>{2}</Modulus>
-<Exponent>{3}</Exponent>
-</RSAKeyValue>
-</KeyValue>
-<X509Data>
-<X509Certificate>
-{4}
-</X509Certificate>
-</X509Data>
-</KeyInfo>
-</Signature>"""
                 # ahora firmo
                 _logger.info('Document: \n%s' % envelope_efact)
                 _logger.info('Signature: \n%s' % signature_d['priv_key'])
 
-                frmt = self.signmessage(envelope_efact.encode('ascii'),
-                                        signature_d['priv_key'].encode('ascii'))
+                frmt = self.signmessage(
+                    envelope_efact.encode('ascii'),
+                    signature_d['priv_key'].encode('ascii'), '', digst='dgst')
 
                 _logger.info('Document signed!')
                 signature = porcion_firma_documento.format(
-                    doc_id_number, frmt['firma'], frmt['modulus'],
-                    frmt['exponent'], signature_d['cert'])
+                    doc_id_number,
+                    frmt['digest'],
+                    frmt['firma'],
+                    frmt['modulus'],
+                    frmt['exponent'],
+                    signature_d['cert'])
 
                 einvoice = """\
 <DTE xmlns="http://www.sii.cl/SiiDte" version="1.0">
-{0}{1}
-</DTE>""".format(envelope_efact, signature)
+{0}{1}</DTE>""".format(envelope_efact, signature)
 
                 # HASTA ACA LA FIRMA
                 # aca valido el documento para ver si está mal formado
