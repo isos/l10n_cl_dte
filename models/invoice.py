@@ -244,7 +244,7 @@ class invoice(models.Model):
         print(xml)
         return xml
 
-    def sign_seed(self, message, privkey, cert_file):
+    def sign_node(self, message, privkey, cert_file):
         doc = etree.fromstring(message)
         node = xmlsec.findNode(doc, xmlsec.dsig("Signature"))
         dsigCtx = xmlsec.DSigCtx()
@@ -478,7 +478,7 @@ version="1.0">{}{}</EnvioDTE>""".format(set_dte, signature)
                         seed = self.get_seed()
                         _logger.info(_("Seed is: {}").format(seed))
                         template_string = self.create_template_seed(seed)
-                        seed_firmado = self.sign_seed(
+                        seed_firmado = self.sign_node(
                             template_string, signature_d['priv_key'], xsdpath+"mycert.pem")
                         token = self.get_token(seed_firmado)
                         _logger.info(_("Token is: {}").format(token))
