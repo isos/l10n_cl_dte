@@ -49,7 +49,7 @@ Chile: API and GUI to access Electronic Invoicing webservices.
             'suds',
             'urllib3',
             'SOAPpy',
-            'dm.xmlsec.binding'
+            'signxml'
         ]
     },
     'data': [

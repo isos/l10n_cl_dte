@@ -93,10 +93,9 @@ except ImportError:
     _logger.info('Cannot import SOOAPpy')
 
 try:
-    import dm.xmlsec.binding as xmlsec
-    xmlsec.initialize()
+    from signxml import xmldsig, methods
 except ImportError:
-    _logger.info('Cannot import SOOAPpy')
+    _logger.info('Cannot import signxml')
 
 # timbre patrón. Permite parsear y formar el
 # ordered-dict patrón corespondiente al documento
@@ -214,45 +213,51 @@ class invoice(models.Model):
 <item>
 <Semilla>{}</Semilla>
 </item>
-<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
-<SignedInfo>
-<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
-<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
-<Reference URI="">
-<Transforms>
-<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
-</Transforms>
-<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
-<DigestValue/>
-</Reference>
-</SignedInfo>
-<SignatureValue/>
-<KeyInfo>
-<KeyValue>
-<RSAKeyValue>
-<Modulus/>
-<Exponent/>
-</RSAKeyValue>
-</KeyValue>
-<X509Data>
-<X509Certificate/>
-</X509Data>
-</KeyInfo>
-</Signature>
-</getToken>'''.format(seed)
-        # Debug
-        print(xml)
+</getToken>
+'''.format(seed)
         return xml
 
-    def sign_node(self, message, privkey, cert_file):
+    def create_template_doc(self, doc):
+        xml = u'''<DTE xmlns="http://www.sii.cl/SiiDte" version="1.0">
+{}</DTE>'''.format(doc)
+        return xml
+
+
+    def sign_seed(self, message, privkey, cert):
         doc = etree.fromstring(message)
-        node = xmlsec.findNode(doc, xmlsec.dsig("Signature"))
-        dsigCtx = xmlsec.DSigCtx()
-        signKey = xmlsec.Key.loadMemory(privkey, xmlsec.KeyDataFormatPem, "")
-        signKey.loadCert(cert_file, xmlsec.KeyDataFormatPem)
-        dsigCtx.signKey = signKey
-        dsigCtx.sign(node)
-        return etree.tostring(doc)
+        signed_node = xmldsig(
+            doc, digest_algorithm=u'sha1').sign(
+            method=methods.enveloped, algorithm=u'rsa-sha1', key=privkey,
+            cert=cert)
+        msg = etree.tostring(
+            signed_node, pretty_print=True).replace('ds:', '')
+        return msg
+
+    def sign_full_xml(self, message, privkey, cert, uri):
+        # canocalization REC-xml-c14n-20010315
+        # < CanonicalizationMethod
+        # Algorithm = u'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
+        # Algorithm REC-xml-c14n-20010315
+        doc = etree.fromstring(message)
+        signed_node = xmldsig(
+            doc, digest_algorithm=u'sha1').sign(
+            method=methods.enveloped, algorithm=u'rsa-sha1',
+            c14n_algorithm=u'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+            reference_uri='#'+uri,
+            key=privkey.encode('ascii'),
+            cert=cert.encode('ascii'))
+        # verified_data = xmldsig(signed_node).verify()
+        # no validó el digest
+        msg = etree.tostring(
+            signed_node, pretty_print=True).replace('ds:', '').replace(
+            ':ds=','=')
+        # validacion_type = {
+        #     'doc': 'DTE_v10.xsd',
+        #     'env': 'EnvioDTE_v10.xsd',
+        #     'sig': 'xmldsignature_v10.xsd'
+        # }
+        # xsd_file = xsdpath + 'DTE_v10.xsd'
+        return msg
 
     def get_token(self, seed_file):
         url = server_url + 'GetTokenFromSeed.jws?WSDL'
@@ -292,9 +297,10 @@ class invoice(models.Model):
                 'subject_name': user_obj.name,
                 'subject_serial_number': user_obj.subject_serial_number,
                 'priv_key': user_obj.priv_key,
-                'cert': user_obj.cert.replace(
-                    '''-----BEGIN CERTIFICATE-----\n''','').replace(
-                    '''\n-----END CERTIFICATE-----\n''','')}
+                'cert': user_obj.cert}
+                # 'cert': user_obj.cert.replace(
+                #     '''-----BEGIN CERTIFICATE-----\n''','').replace(
+                #     '''\n-----END CERTIFICATE-----\n''','')}
             _logger.info('The signature data is the following %s' % signature_data)
             # todo: chequear si el usuario no tiene firma, si esta autorizado por otro usuario
             return signature_data
@@ -417,7 +423,7 @@ ordered scheme for sending packages to SII:')
                     # este set de envio lo tengo que firmar
                     # ahora firmo
                     _logger.info('Set DTEs: \n%s' % set_dte)
-                    _logger.info('Signature: \n%s' % signature_d['priv_key'])
+                    # _logger.info('Signature: \n%s' % signature_d['priv_key'])
 
                     frmt = self.signmessage(
                         set_dte.encode('ascii'),
@@ -472,17 +478,14 @@ version="1.0">{}{}</EnvioDTE>""".format(set_dte, signature)
                         #     'priv_key': user_obj.priv_key,
                         #     'cert': user_obj.cert}
 
-                        file = open(xsdpath+'mycert.pem', 'w')
-                        file.write(signature_d['cert'])
-                        file.close()
                         seed = self.get_seed()
                         _logger.info(_("Seed is: {}").format(seed))
                         template_string = self.create_template_seed(seed)
-                        seed_firmado = self.sign_node(
-                            template_string, signature_d['priv_key'], xsdpath+"mycert.pem")
+                        seed_firmado = self.sign_seed(
+                            template_string, signature_d['priv_key'],
+                            signature_d['cert'])
                         token = self.get_token(seed_firmado)
                         _logger.info(_("Token is: {}").format(token))
-
                     else:
                         raise Warning(connection_status[response.e])
                 else:
@@ -588,6 +591,29 @@ www.sii.cl'''.format(folio, folio_inicial, folio_final)
         sha1 = hashlib.sha1()
         sha1.update(data)
         return sha1.digest()
+
+    def signrsa(self, MESSAGE, KEY, digst=''):
+        KEY = KEY.encode('ascii')
+        rsa = M2Crypto.EVP.load_key_string(KEY)
+        rsa.reset_context(md='sha1')
+        rsa_m = rsa.get_rsa()
+        rsa.sign_init()
+        rsa.sign_update(MESSAGE)
+        FRMT = base64.b64encode(rsa.sign_final())
+        _logger.info('Document signature in base64: %s' % FRMT)
+        if digst == '':
+            _logger.info("""Signature verified! Returning signature, modulus \
+and exponent.""")
+            return {
+                'firma': FRMT, 'modulus': base64.b64encode(rsa_m.n),
+                'exponent': base64.b64encode(rsa_m.e)}
+        else:
+            _logger.info("""Signature verified! Returning signature, modulus, \
+exponent. AND DIGEST""")
+            return {
+                'firma': FRMT, 'modulus': base64.b64encode(rsa_m.n),
+                'exponent': base64.b64encode(rsa_m.e),
+                'digest': base64.b64encode(self.digest(MESSAGE))}
 
     def signmessage(self, MESSAGE, KEY, pubk='', digst=''):
         rsa = M2Crypto.EVP.load_key_string(KEY)
@@ -921,11 +947,12 @@ and exponent.""")
                 xml = xml.replace('<TEDd>TEDTEDTED</TEDd>', ted1 + time)
 
             root = etree.XML( xml )
-            xml_pret = self.remove_indents((etree.tostring(root, pretty_print=True)).replace(
+            xml_pret = self.remove_indents(
+                (etree.tostring(root, pretty_print=True)).replace(
                     '<Documento_ID>', doc_id).replace(
                     '</Documento_ID>', '</Documento>'))
 
-            # _logger.info(xml_pret)
+            # raise Warning(xml_pret)
             # en xml_pret está el xml que me interesa
             if dte_service in ['SII', 'SIIHOMO']:
                 # lo dejo con format, para ver si es necesario agregar algo más
@@ -933,37 +960,48 @@ and exponent.""")
                 envelope_efact = '''{}'''.format(
                     self.convert_encoding(xml_pret, 'ISO-8859-1'))
                 # inv.sii_xml_request = envelope_efact
+                _logger.info('Validating document against schema...')
 
                 inv.sii_result = 'NoEnviado'
 
                 # ACA INCORPORO EL RESTO DE LA FIRMA
-                # ahora firmo
-                _logger.info('Document: \n%s' % envelope_efact)
-                _logger.info('Signature: \n%s' % signature_d['priv_key'])
+                 # ahora firmo
+                # _logger.info('Document: \n%s' % envelope_efact)
+                # _logger.info('Signature: \n%s' % signature_d['priv_key'])
 
-                frmt = self.signmessage(
-                    envelope_efact.encode('ascii'),
-                    signature_d['priv_key'].encode('ascii'), '', digst='dgst')
+                envelope_efact = self.create_template_doc(envelope_efact)
+                print(envelope_efact)
 
+
+                #raise Warning(envelope_efact)
+                einvoice = self.sign_full_xml(
+                    envelope_efact, signature_d['priv_key'],
+                    signature_d['cert'], doc_id_number).replace(
+                    '<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>','').replace(
+                    '<KeyInfo>', '<KeyInfo><RSAKeyValue><Modulus/><Exponent/></RSAKeyValue>')
+                print(einvoice)
+                RSAKeyValue = self.signrsa(
+                    xml_pret, signature_d['priv_key'], digst='digst')
+                raise Warning(RSAKeyValue)
                 _logger.info('Document signed!')
-                signature = porcion_firma_documento.format(
-                    doc_id_number,
-                    frmt['digest'],
-                    frmt['firma'],
-                    frmt['modulus'],
-                    frmt['exponent'],
-                    signature_d['cert'])
+                einvoice = einvoice if self.xml_validator(
+                    einvoice) else ''
+                #signature = porcion_firma_documento.format(
+                #    doc_id_number,
+                #    frmt['digest'],
+                #    frmt['firma'],
+                #    frmt['modulus'],
+                #    frmt['exponent'],
+                #    signature_d['cert'])
 
-                einvoice = """\
-<DTE xmlns="http://www.sii.cl/SiiDte" version="1.0">
-{0}{1}</DTE>""".format(envelope_efact, signature)
+#                einvoice = """\
+#<DTE xmlns="http://www.sii.cl/SiiDte" version="1.0">
+#{0}{1}</DTE>""".format(envelope_efact, signature)
 
                 # HASTA ACA LA FIRMA
                 # aca valido el documento para ver si está mal formado
                 # pero igual ya lo tengo grabado
-                _logger.info('Validating document against schema...')
-                inv.sii_xml_request = einvoice if self.xml_validator(
-                    einvoice) else ''
+                # validacion vieja
 
             elif dte_service == 'EFACTURADELSUR':
                 # armado del envolvente rrespondiente a EACTURADELSUR
