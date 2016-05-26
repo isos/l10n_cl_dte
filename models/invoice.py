@@ -230,7 +230,6 @@ class invoice(models.Model):
 {}</DTE>'''.format(doc)
         return xml
 
-
     def sign_seed(self, message, privkey, cert):
         doc = etree.fromstring(message)
         signed_node = xmldsig(
@@ -242,10 +241,6 @@ class invoice(models.Model):
         return msg
 
     def sign_full_xml(self, message, privkey, cert, uri):
-        # este no va:
-        # http://www.w3.org/2006/12/xml-c14n11
-        # este si va:
-        # http://www.w3.org/TR/2001/REC-xml-c14n-20010315
         doc = etree.fromstring(message)
         signed_node = xmldsig(
             doc, digest_algorithm=u'sha1').sign(
@@ -292,9 +287,6 @@ class invoice(models.Model):
             return signature_data
         else:
             return ''
-
-    ### fin de funciones usadas en autenticacion
-
 
     def get_digital_signature(self, comp_id):
         _logger.info(_('Executing digital signature function'))
@@ -978,37 +970,17 @@ and exponent.""")
                 # _logger.info('Signature: \n%s' % signature_d['priv_key'])
 
                 envelope_efact = self.create_template_doc(envelope_efact)
-                print(envelope_efact)
-
-
-                #raise Warning(envelope_efact)
+                # Inicio de Firma
                 einvoice = self.sign_full_xml(
                     envelope_efact, signature_d['priv_key'],
                     signature_d['cert'], doc_id_number)
-                print(einvoice)
-                # RSAKeyValue = self.signrsa(
-                #     xml_pret, signature_d['priv_key'], digst='digst')
-                # raise Warning(RSAKeyValue)
                 _logger.info('Document signed!')
                 einvoice = einvoice if self.xml_validator(
                     einvoice) else ''
-                raise Warning('fuck!!!')
-                #signature = porcion_firma_documento.format(
-                #    doc_id_number,
-                #    frmt['digest'],
-                #    frmt['firma'],
-                #    frmt['modulus'],
-                #    frmt['exponent'],
-                #    signature_d['cert'])
-
-#                einvoice = """\
-#<DTE xmlns="http://www.sii.cl/SiiDte" version="1.0">
-#{0}{1}</DTE>""".format(envelope_efact, signature)
-
+                inv.write({
+                    'sii_xml_request': einvoice,
+                    'inv.sii_result': 'NoEnviado'})
                 # HASTA ACA LA FIRMA
-                # aca valido el documento para ver si está mal formado
-                # pero igual ya lo tengo grabado
-                # validacion vieja
 
             elif dte_service == 'EFACTURADELSUR':
                 # armado del envolvente rrespondiente a EACTURADELSUR
