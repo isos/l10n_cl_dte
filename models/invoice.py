@@ -240,7 +240,7 @@ class invoice(models.Model):
             signed_node, pretty_print=True).replace('ds:', '')
         return msg
 
-    def sign_full_xml(self, message, privkey, cert, uri):
+    def sign_full_xml(self, message, privkey, cert, uri, type='doc'):
         doc = etree.fromstring(message)
         signed_node = xmldsig(
             doc, digest_algorithm=u'sha1').sign(
@@ -259,7 +259,7 @@ class invoice(models.Model):
                 x509certificate)).replace('''<Transform Algorithm=\
 "http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>''','').replace(
             '><', '>\n<')
-        print(message+msg)
+        msg = msg if self.xml_validator(msg, type) else ''
         return msg
 
     def get_token(self, seed_file):
@@ -975,8 +975,8 @@ and exponent.""")
                     envelope_efact, signature_d['priv_key'],
                     signature_d['cert'], doc_id_number)
                 _logger.info('Document signed!')
-                einvoice = einvoice if self.xml_validator(
-                    einvoice) else ''
+                # la función de firma lo devuelve unicamente en estado positivo
+                # al hacer la validación embebida dentro de la misma funcion
                 inv.write({
                     'sii_xml_request': einvoice,
                     'inv.sii_result': 'NoEnviado'})
