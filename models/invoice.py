@@ -11,6 +11,8 @@ import lxml.etree as etree
 from lxml import objectify
 from lxml.etree import XMLSyntaxError
 
+import xml.dom.minidom
+
 import socket
 import collections
 
@@ -146,6 +148,12 @@ Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315" />
 
 server_url = 'https://maullin.sii.cl/DTEWS/'
 
+signatureElements = [
+    'TmstFirma', 'SignatureValue', 'DigestValue', 'Modulus', 'Exponent']
+
+BC = '''-----BEGIN CERTIFICATE-----\n'''
+EC = '''\n-----END CERTIFICATE-----\n'''
+
 # hardcodeamos este valor por ahora
 import os
 xsdpath = os.path.dirname(os.path.realpath(__file__)).replace('/models','/static/xsd/')
@@ -234,29 +242,29 @@ class invoice(models.Model):
         return msg
 
     def sign_full_xml(self, message, privkey, cert, uri):
-        # canocalization REC-xml-c14n-20010315
-        # < CanonicalizationMethod
-        # Algorithm = u'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
-        # Algorithm REC-xml-c14n-20010315
+        # este no va:
+        # http://www.w3.org/2006/12/xml-c14n11
+        # este si va:
+        # http://www.w3.org/TR/2001/REC-xml-c14n-20010315
         doc = etree.fromstring(message)
         signed_node = xmldsig(
             doc, digest_algorithm=u'sha1').sign(
             method=methods.enveloped, algorithm=u'rsa-sha1',
             c14n_algorithm=u'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
             reference_uri='#'+uri,
-            key=privkey.encode('ascii'),
-            cert=cert.encode('ascii'))
-        # verified_data = xmldsig(signed_node).verify()
-        # no validó el digest
+            key=str(privkey))
+        x509certificate = '''
+<X509Data>
+<X509Certificate>{}</X509Certificate>
+</X509Data>'''.format(cert.replace(BC, '').replace(EC, ''))
         msg = etree.tostring(
             signed_node, pretty_print=True).replace('ds:', '').replace(
-            ':ds=','=')
-        # validacion_type = {
-        #     'doc': 'DTE_v10.xsd',
-        #     'env': 'EnvioDTE_v10.xsd',
-        #     'sig': 'xmldsignature_v10.xsd'
-        # }
-        # xsd_file = xsdpath + 'DTE_v10.xsd'
+            ':ds=','=').replace(
+            '</KeyValue></KeyInfo>', '</KeyValue>{}</KeyInfo>'.format(
+                x509certificate)).replace('''<Transform Algorithm=\
+"http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>''','').replace(
+            '><', '>\n<')
+        print(message+msg)
         return msg
 
     def get_token(self, seed_file):
@@ -976,16 +984,15 @@ and exponent.""")
                 #raise Warning(envelope_efact)
                 einvoice = self.sign_full_xml(
                     envelope_efact, signature_d['priv_key'],
-                    signature_d['cert'], doc_id_number).replace(
-                    '<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>','').replace(
-                    '<KeyInfo>', '<KeyInfo><RSAKeyValue><Modulus/><Exponent/></RSAKeyValue>')
+                    signature_d['cert'], doc_id_number)
                 print(einvoice)
-                RSAKeyValue = self.signrsa(
-                    xml_pret, signature_d['priv_key'], digst='digst')
-                raise Warning(RSAKeyValue)
+                # RSAKeyValue = self.signrsa(
+                #     xml_pret, signature_d['priv_key'], digst='digst')
+                # raise Warning(RSAKeyValue)
                 _logger.info('Document signed!')
                 einvoice = einvoice if self.xml_validator(
                     einvoice) else ''
+                raise Warning('fuck!!!')
                 #signature = porcion_firma_documento.format(
                 #    doc_id_number,
                 #    frmt['digest'],
