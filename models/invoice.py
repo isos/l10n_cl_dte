@@ -220,7 +220,8 @@ class invoice(models.Model):
                 schema = etree.XMLSchema(file=xsd_file)
                 parser = objectify.makeparser(schema=schema)
                 objectify.fromstring(some_xml_string, parser)
-                _logger.info("The Document XML file validated correctly")
+                _logger.info(_("The Document XML file validated correctly: \
+(%s)") % validacion)
                 return True
             except XMLSyntaxError as e:
                 _logger.info(_("The Document XML file has error: %s") % e.args)
@@ -268,33 +269,22 @@ class invoice(models.Model):
             reference_uri='#'+uri,
             key=str(privkey))
         x509certificate = '''
-<X509Data>
-<X509Certificate>{}</X509Certificate>
-</X509Data>'''.format(cert.replace(BC, '').replace(EC, ''))
-        #if type == 'doc':
-        #    msg = etree.tostring(
-        #        signed_node, pretty_print=True).replace(
-        #        '</ds:KeyValue></ds:KeyInfo>', '</ds:KeyValue>{}</ds:KeyInfo>'.format(
-        #            x509certificate))
-        #else:
-        #    msg = etree.tostring(
-        #        signed_node, pretty_print=True).replace(
-        #        '</ds:KeyValue></ds:KeyInfo>', '</ds:KeyValue>{}</ds:KeyInfo>'.format(
-        #            x509certificate))
-        #
-        #msg = msg.replace('ds:', '').replace(':ds=', '=').replace(
-        #    '''<Transform Algorithm=\
-        #"http://#www.w3.org/2000/09/xmldsig#enveloped-signature"/>''','')
-        #        ## print(msg.replace('><', '>\n<'))
-        #
+    <X509Data>
+      <X509Certificate>{}</X509Certificate>
+    </X509Data>'''.format(cert.replace(BC, '').replace(EC, ''))
         msg = etree.tostring(signed_node, pretty_print=True).replace(
             'ds:', '').replace(':ds=', '=').replace(
             '</KeyValue>', '''</KeyValue>{}'''.format(x509certificate))
-        print(msg)
-        raise Warning('fuck xml format!')
-        msg = msg if self.xml_validator(msg, type) else ''
-
-        return msg
+        # print(msg)
+        msg = msg if self.xml_validator(msg, 'sig') else ''
+        if type=='doc':
+            fulldoc = message.replace('</DTE>', msg + '</DTE>')
+        elif type=='env':
+            fulldoc = message.replace('</EnvioDTE>', msg + '</EnvioDTE>')
+        print(fulldoc)
+        fulldoc = fulldoc if self.xml_validator(fulldoc, type) else ''
+        # raise Warning('fuck xml format!')
+        return fulldoc
 
     def get_token(self, seed_file):
         url = server_url + 'GetTokenFromSeed.jws?WSDL'
