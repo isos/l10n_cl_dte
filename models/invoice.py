@@ -259,10 +259,10 @@ class invoice(models.Model):
         return xml
 
     def create_template_doc2(self, doc, sign):
-        xml = '''<EnvioDTE xmlns = "http://www.sii.cl/SiiDte" \
-xmlns:xsi = "http://www.w3.org/2001/XMLSchema-instance" \
-xsi:schemaLocation = "http://www.sii.cl/SiiDte EnvioDTE_v10.xsd" \
-version = "1.0">{}{}</EnvioDTE>'''.format(doc, sign)
+        xml = '''<EnvioDTE xmlns="http://www.sii.cl/SiiDte" \
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" \
+xsi:schemaLocation="http://www.sii.cl/SiiDte EnvioDTE_v10.xsd" \
+version="1.0">{}{}</EnvioDTE>'''.format(doc, sign)
         return xml
 
     def sign_seed(self, message, privkey, cert):
@@ -287,23 +287,24 @@ version = "1.0">{}{}</EnvioDTE>'''.format(doc, sign)
         #     doc, digest_algorithm=u'sha1').sign(
         #     method=methods.detached, algorithm=u'rsa-sha1',
         #     key=privkey.encode('ascii'))
+
         x509certificate = '''
     <X509Data>
       <X509Certificate>{}</X509Certificate>
     </X509Data>'''.format(cert.replace(BC, '').replace(EC, ''))
+
         msg = etree.tostring(signed_node, pretty_print=True).replace(
             'ds:', '').replace(':ds=', '=').replace(
             '</KeyValue>', '''</KeyValue>{}'''.format(x509certificate))
         msg = msg if self.xml_validator(msg, 'sig') else ''
+
         if type=='doc':
             fulldoc = self.create_template_doc1(message, msg)
         elif type=='env':
             fulldoc = self.create_template_doc2(message, msg)
-            # fulldoc = message.replace('</EnvioDTE>', msg + '</EnvioDTE>')
 
-        print(fulldoc)
         fulldoc = fulldoc if self.xml_validator(fulldoc, type) else ''
-        # raise Warning('fuck xml format!')
+
         return fulldoc
 
     def get_token(self, seed_file):
