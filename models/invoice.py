@@ -283,6 +283,7 @@ version="1.0">{}{}</EnvioDTE>'''.format(doc, sign)
             c14n_algorithm=u'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
             reference_uri='#'+uri,
             key=privkey.encode('ascii'))
+        # welcome back to this library... let see what happen this time
         # signed_node = xmldsig(
         #     doc, digest_algorithm=u'sha1').sign(
         #     method=methods.detached, algorithm=u'rsa-sha1',
