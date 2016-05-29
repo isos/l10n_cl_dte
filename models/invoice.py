@@ -190,7 +190,7 @@ class invoice(models.Model):
         # print(local_dt)
         # raise Warning('fucking time!')
         # return local_dt
-        return datetime.now() - timedelta(hours=4)
+        return datetime.now()
 
 
     def remove_indents(self, xml):
@@ -248,6 +248,21 @@ class invoice(models.Model):
     def create_template_doc(self, doc):
         xml = u'''<DTE xmlns="http://www.sii.cl/SiiDte" version="1.0">
 {}</DTE>'''.format(doc)
+        # create_template_doc
+        # anulo el efecto de la funcion
+        # para hacer un detached
+        return doc
+
+    def create_template_doc1(self, doc, sign):
+        xml = '''<DTE xmlns="http://www.sii.cl/SiiDte" version="1.0">
+    {}{}</DTE>'''.format(doc, sign)
+        return xml
+
+    def create_template_doc2(self, doc, sign):
+        xml = '''<EnvioDTE xmlns = "http://www.sii.cl/SiiDte" \
+xmlns:xsi = "http://www.w3.org/2001/XMLSchema-instance" \
+xsi:schemaLocation = "http://www.sii.cl/SiiDte EnvioDTE_v10.xsd" \
+version = "1.0">{}{}</EnvioDTE>'''.format(doc, sign)
         return xml
 
     def sign_seed(self, message, privkey, cert):
@@ -267,7 +282,11 @@ class invoice(models.Model):
             method=methods.detached, algorithm=u'rsa-sha1',
             c14n_algorithm=u'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
             reference_uri='#'+uri,
-            key=str(privkey))
+            key=privkey.encode('ascii'))
+        # signed_node = xmldsig(
+        #     doc, digest_algorithm=u'sha1').sign(
+        #     method=methods.detached, algorithm=u'rsa-sha1',
+        #     key=privkey.encode('ascii'))
         x509certificate = '''
     <X509Data>
       <X509Certificate>{}</X509Certificate>
@@ -275,12 +294,13 @@ class invoice(models.Model):
         msg = etree.tostring(signed_node, pretty_print=True).replace(
             'ds:', '').replace(':ds=', '=').replace(
             '</KeyValue>', '''</KeyValue>{}'''.format(x509certificate))
-        # print(msg)
         msg = msg if self.xml_validator(msg, 'sig') else ''
         if type=='doc':
-            fulldoc = message.replace('</DTE>', msg + '</DTE>')
+            fulldoc = self.create_template_doc1(message, msg)
         elif type=='env':
-            fulldoc = message.replace('</EnvioDTE>', msg + '</EnvioDTE>')
+            fulldoc = self.create_template_doc2(message, msg)
+            # fulldoc = message.replace('</EnvioDTE>', msg + '</EnvioDTE>')
+
         print(fulldoc)
         fulldoc = fulldoc if self.xml_validator(fulldoc, type) else ''
         # raise Warning('fuck xml format!')
@@ -441,10 +461,11 @@ ordered scheme for sending packages to SII:')
 <SetDTE ID="OdooBMyA">
 {}{}</SetDTE>'''.format(caratxml_pret, invoices_to_send)
                     # todo: chequear que si no tengo firma, algun usuario del
-                    envio_dte = """<EnvioDTE xmlns="http://www.sii.cl/SiiDte" \
-xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" \
-xsi:schemaLocation="http://www.sii.cl/SiiDte EnvioDTE_v10.xsd" \
-version="1.0">{}</EnvioDTE>""".format(set_dte)
+                    envio_dte = set_dte
+#                    envio_dte = """<EnvioDTE xmlns="http://www.sii.cl/SiiDte" \
+#xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" \
+#xsi:schemaLocation="http://www.sii.cl/SiiDte EnvioDTE_v10.xsd" \
+#version="1.0">{}</EnvioDTE>""".format(set_dte)
                     _logger.info('Envio de DTEs:...')
                     #envio_dte = envio_dte.replace(
                     #    '--TmstFirmaEnv--', datetime.strftime(
@@ -456,14 +477,15 @@ version="1.0">{}</EnvioDTE>""".format(set_dte)
                             datetime.strftime(
                                 datetime.now(), '%H:%M:%S')).strftime(
                             '%Y-%m-%dT%H:%M:%S'))
-
+                    #print(envio_dte)
                     envio_dte = '''<?xml version="1.0" \
 encoding="ISO-8859-1"?>
 {}'''.format(self.sign_full_xml(envio_dte, signature_d['priv_key'],
                                 signature_d['cert'], 'OdooBMyA', 'env'))
 
-                    print(envio_dte)
-                    raise Warning('fuck send!')
+                print(envio_dte)
+                raise Warning('fuck send!')
+
 
                 invoice_obj.sii_xml_request = envio_dte
 
