@@ -192,7 +192,6 @@ class invoice(models.Model):
         # return local_dt
         return datetime.now()
 
-
     def remove_indents(self, xml):
         return xml.replace(
             '        <','<').replace(
@@ -269,7 +268,8 @@ version="1.0">{}{}</EnvioDTE>'''.format(doc, sign)
         doc = etree.fromstring(message)
         signed_node = xmldsig(
             doc, digest_algorithm=u'sha1').sign(
-            method=methods.enveloped, algorithm=u'rsa-sha1', key=privkey,
+            method=methods.enveloped, algorithm=u'rsa-sha1',
+            key=privkey.encode('ascii'),
             cert=cert)
         msg = etree.tostring(
             signed_node, pretty_print=True).replace('ds:', '')
@@ -287,7 +287,9 @@ version="1.0">{}{}</EnvioDTE>'''.format(doc, sign)
         #     doc, digest_algorithm=u'sha1').sign(
         #     method=methods.detached, algorithm=u'rsa-sha1',
         #     key=privkey.encode('ascii'))
-
+        Transforms = '''<Transforms>
+<Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+</Transforms>'''
         x509certificate = '''
     <X509Data>
       <X509Certificate>{}</X509Certificate>
@@ -295,7 +297,11 @@ version="1.0">{}{}</EnvioDTE>'''.format(doc, sign)
 
         msg = etree.tostring(signed_node, pretty_print=True).replace(
             'ds:', '').replace(':ds=', '=').replace(
-            '</KeyValue>', '''</KeyValue>{}'''.format(x509certificate))
+            '</KeyValue>', '''</KeyValue>{}'''.format(x509certificate)).replace(
+            '</Reference>', Transforms+'</Reference>')
+        print(msg)
+        raise Warning('transforms!')
+
         msg = msg if self.xml_validator(msg, 'sig') else ''
 
         if type=='doc':
@@ -327,7 +333,7 @@ version="1.0">{}{}</EnvioDTE>'''.format(doc, sign)
                 'subject_serial_number': user_obj.subject_serial_number,
                 'priv_key': user_obj.priv_key,
                 'cert': user_obj.cert}
-            _logger.info('The signature data is the following %s' % signature_data)
+            # _logger.info('The signature data is the following %s' % signature_data)
             # todo: chequear si el usuario no tiene firma, si esta autorizado por otro usuario
             return signature_data
         else:
@@ -478,15 +484,13 @@ ordered scheme for sending packages to SII:')
                             datetime.strftime(
                                 datetime.now(), '%H:%M:%S')).strftime(
                             '%Y-%m-%dT%H:%M:%S'))
-                    #print(envio_dte)
                     envio_dte = '''<?xml version="1.0" \
 encoding="ISO-8859-1"?>
 {}'''.format(self.sign_full_xml(envio_dte, signature_d['priv_key'],
                                 signature_d['cert'], 'OdooBMyA', 'env'))
 
                 print(envio_dte)
-                raise Warning('fuck send!')
-
+                # raise Warning('fuck send!')
 
                 invoice_obj.sii_xml_request = envio_dte
 
@@ -499,13 +503,14 @@ encoding="ISO-8859-1"?>
                             self.company_id)
 
                         seed = self.get_seed()
-                        _logger.info(_("Seed is: {}").format(seed))
+                        _logger.info(_("Seed is:  {}").format(seed))
                         template_string = self.create_template_seed(seed)
                         seed_firmado = self.sign_seed(
                             template_string, signature_d['priv_key'],
                             signature_d['cert'])
                         token = self.get_token(seed_firmado)
                         _logger.info(_("Token is: {}").format(token))
+                        raise Warning('fuck token!')
                     else:
                         raise Warning(connection_status[response.e])
                 else:
@@ -514,13 +519,11 @@ encoding="ISO-8859-1"?>
                     inv.sii_result = 'NoEnviado'
                     raise Warning('Error')
                 ######### fin de bloque de autenticacion ###########
-
                 ########### inicio del bloque de envio #############
                 ###
                 pass
                 ###
                 ############# fin del bloque de envio ##############
-
 
     # funcion para descargar el XML
     @api.multi
