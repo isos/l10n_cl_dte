@@ -276,6 +276,9 @@ version="1.0">{}{}</EnvioDTE>'''.format(doc, sign)
         return msg
 
     def sign_full_xml(self, message, privkey, cert, uri, type='doc'):
+        print('asi entra el mensaje')
+        print(message)
+        # raise Warning('message')
         doc = etree.fromstring(message)
         signed_node = xmldsig(
             doc, digest_algorithm=u'sha1').sign(
@@ -299,9 +302,7 @@ version="1.0">{}{}</EnvioDTE>'''.format(doc, sign)
         msg = etree.tostring(signed_node, pretty_print=True).replace(
             'ds:', '').replace(':ds=', '=').replace(
             '</KeyValue>', '''</KeyValue>{}'''.format(x509certificate)).replace(
-            '</Reference>', Transforms+'</Reference>')
-        print(msg)
-        raise Warning('transforms!')
+            '</DigestMethod ', Transforms+'</DigestMethod ')
 
         msg = msg if self.xml_validator(msg, 'sig') else ''
 
@@ -311,7 +312,6 @@ version="1.0">{}{}</EnvioDTE>'''.format(doc, sign)
             fulldoc = self.create_template_doc2(message, msg)
 
         fulldoc = fulldoc if self.xml_validator(fulldoc, type) else ''
-
         return fulldoc
 
     def get_token(self, seed_file):
@@ -813,9 +813,8 @@ exponent. AND DIGEST""")
 
             frmt = inv.signmessage(ddxml, keypriv, keypub)['firma']
             ted = (
-                '''<TED version="1.0">
-{}<FRMT algoritmo="SHA1withRSA">{}</FRMT>
-</TED>''').format(ddxml, frmt)
+                '''<TED version="1.0">{}<FRMT algoritmo="SHA1withRSA">{}\
+</FRMT></TED>''').format(ddxml, frmt)
             _logger.info(ted)
             root = etree.XML(ted)
             # inv.sii_barcode = (etree.tostring(root, pretty__logger.info=True))
