@@ -183,22 +183,25 @@ class invoice(models.Model):
 
     def create_template_envio(self, RutEmisor, RutReceptor, FchResol, NroResol,
                               TmstFirmaEnv, TpoDTE, EnvioDTE):
+        signature_d = self.get_digital_signature_pem(self.company_id)
+
         xml = '''<SetDTE ID="OdooBMyA">
-<Caratula version = "1.0">
+<Caratula version="1.0">
 <RutEmisor>{0}</RutEmisor>
-<RutEnvia>{0}</RutEnvia>
-<RutReceptor>{1}</RutReceptor>
-<FchResol>{2}</FchResol>
-<NroResol>{3}</NroResol>
-<TmstFirmaEnv>{4}</TmstFirmaEnv>
+<RutEnvia>{1}</RutEnvia>
+<RutReceptor>{2}</RutReceptor>
+<FchResol>{3}</FchResol>
+<NroResol>{4}</NroResol>
+<TmstFirmaEnv>{5}</TmstFirmaEnv>
 <SubTotDTE>
-<TpoDTE>{5}</TpoDTE>
+<TpoDTE>{6}</TpoDTE>
 <NroDTE>1</NroDTE>
 </SubTotDTE>
 </Caratula>
-{6}
-</SetDTE>'''.format(RutEmisor, RutReceptor, FchResol, NroResol, TmstFirmaEnv,
-                    TpoDTE, EnvioDTE)
+{7}
+</SetDTE>
+'''.format(RutEmisor, signature_d['subject_serial_number'], RutReceptor,
+           FchResol, NroResol, TmstFirmaEnv, TpoDTE, EnvioDTE)
         return xml
 
     def convert_timezone(self, dia, time):
@@ -273,6 +276,7 @@ class invoice(models.Model):
 
     def create_template_doc(self, doc):
         xml = u'''<DTE xmlns="http://www.sii.cl/SiiDte" version="1.0">
+  <!-- Odoo Implementation Blanco Martin -->
 {}</DTE>'''.format(doc)
         # create_template_doc
         # anulo el efecto de la funcion
@@ -332,10 +336,10 @@ version="1.0">
 {}</X509Certificate>
 </X509Data>'''.format(cert)
         msg = etree.tostring(signed_node, pretty_print=True)
-        msg = msg.replace(
+        msg = self.remove_indents(msg.replace(
             '</ds:KeyValue>', '''</ds:KeyValue>{}'''.format(x509certificate)).replace(
             '<ds:DigestMethod ', Transforms+'<ds:DigestMethod ').replace(
-            'ds:', '').replace(':ds=', '=')
+            'ds:', '').replace(':ds=', '='))
         print(msg)
         msg = msg if self.xml_validator(msg, 'sig') else ''
 
@@ -370,7 +374,8 @@ version="1.0">
                 'subject_name': user_obj.name,
                 'subject_serial_number': user_obj.subject_serial_number,
                 'priv_key': user_obj.priv_key,
-                'cert': user_obj.cert}
+                'cert': user_obj.cert,
+                'rut_envia': user_obj.subject_serial_number}
             # _logger.info('The signature data is the following %s' % signature_data)
             # todo: chequear si el usuario no tiene firma, si esta autorizado por otro usuario
             return signature_data
@@ -504,7 +509,9 @@ ordered scheme for sending packages to SII:')
 
                     set_dte = '''
 <SetDTE ID="OdooBMyA">
-{}{}</SetDTE>'''.format(caratxml_pret, invoices_to_send)
+{}{}</SetDTE>
+'''.format(caratxml_pret, invoices_to_send)
+
                     # todo: chequear que si no tengo firma, algun usuario del
                     envio_dte = set_dte
 #                    envio_dte = """<EnvioDTE xmlns="http://www.sii.cl/SiiDte" \
@@ -1033,7 +1040,6 @@ exponent. AND DIGEST""")
                 ### formateo del certificado
                 certp = signature_d['cert'].replace(
                     BC, '').replace(EC, '').replace('\n', '')
-                # certf =
 
                 ## firma del documento
                 einvoice = self.sign_full_xml(
