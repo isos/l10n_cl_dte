@@ -333,10 +333,16 @@ version="1.0">
 {}</X509Certificate>
 </X509Data>'''.format(cert)
         msg = etree.tostring(signed_node, pretty_print=True)
-        msg = self.remove_indents(msg.replace(
-            '</ds:KeyValue>', '''</ds:KeyValue>{}'''.format(x509certificate)).replace(
-            '<ds:DigestMethod ', Transforms+'<ds:DigestMethod ').replace(
-            'ds:', '').replace(':ds=', '='))
+        # separo las adaptaciones que le hago a la firma
+        # para poder administrarlas
+        # mas facil primero: eliminar los indents
+        # despues:  agregar el certificado
+        # despues indicar o no el transform....
+        # despues limpiar los ds...
+        msg = self.remove_indents(msg)
+        msg = msg.replace('</ds:KeyValue>', '</ds:KeyValue>{}'.format(x509certificate))
+        msg = msg.replace('<ds:DigestMethod ', Transforms + '<ds:DigestMethod ')
+        msg = msg.replace('ds:', '').replace(':ds=', '='))
         print('firma......')
         print(msg)
         print('validacion de firma......')
