@@ -342,7 +342,7 @@ version="1.0">
         msg = self.remove_indents(msg)
         msg = msg.replace('</ds:KeyValue>', '</ds:KeyValue>{}'.format(x509certificate))
         # msg = msg.replace('<ds:DigestMethod ', Transforms + '<ds:DigestMethod ')
-        msg = msg.replace('ds:', '').replace(':ds=', '='))
+        msg = msg.replace('ds:', '').replace(':ds=', '=')
         print('firma......')
         print(msg)
         print('validacion de firma......')
