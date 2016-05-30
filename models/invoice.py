@@ -174,6 +174,26 @@ connection_status = {
 class invoice(models.Model):
     _inherit = "account.invoice"
 
+    def create_template_envio(self, RutEmisor, RutReceptor, FchResol, NroResol,
+                              TmstFirmaEnv, TpoDTE, EnvioDTE):
+        xml = '''<SetDTE ID="OdooBMyA">
+<Caratula version = "1.0">
+<RutEmisor>{0}</RutEmisor>
+<RutEnvia>{0}</RutEnvia>
+<RutReceptor>{1}</RutReceptor>
+<FchResol>{2}</FchResol>
+<NroResol>{3}</NroResol>
+<TmstFirmaEnv>{4}</TmstFirmaEnv>
+<SubTotDTE>
+<TpoDTE>{5}</TpoDTE>
+<NroDTE>1</NroDTE>
+</SubTotDTE>
+</Caratula>
+{6}
+</SetDTE>'''.format(RutEmisor, RutReceptor, FchResol, NroResol, TmstFirmaEnv,
+                    TpoDTE, EnvioDTE)
+        return xml
+
     def convert_timezone(self, dia, time):
         print(datetime.strftime(datetime.now(), '%Y-%m-%dT%H:%M:%S'))
         print(datetime.strftime(datetime.now() - timedelta(hours=4), '%Y-%m-%dT%H:%M:%S'))
@@ -254,14 +274,16 @@ class invoice(models.Model):
 
     def create_template_doc1(self, doc, sign):
         xml = '''<DTE xmlns="http://www.sii.cl/SiiDte" version="1.0">
-    {}{}</DTE>'''.format(doc, sign)
+{}{}</DTE>'''.format(doc, sign)
         return xml
 
     def create_template_doc2(self, doc, sign):
-        xml = '''<EnvioDTE xmlns="http://www.sii.cl/SiiDte" \
+        xml = '''<?xml version="1.0" encoding="ISO-8859-1"?>
+<EnvioDTE xmlns="http://www.sii.cl/SiiDte" \
 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" \
 xsi:schemaLocation="http://www.sii.cl/SiiDte EnvioDTE_v10.xsd" \
-version="1.0">{}{}</EnvioDTE>'''.format(doc, sign)
+version="1.0">
+{}{}</EnvioDTE>'''.format(doc, sign)
         return xml
 
     def sign_seed(self, message, privkey, cert):
@@ -276,9 +298,12 @@ version="1.0">{}{}</EnvioDTE>'''.format(doc, sign)
         return msg
 
     def sign_full_xml(self, message, privkey, cert, uri, type='doc'):
-        print('asi entra el mensaje')
+        print('mensaje de entrada: %s' % type)
         print(message)
-        # raise Warning('message')
+        # if type=='env':
+        #     print('Asi entra el mensaje para la segunda firma')
+        #     print(message)
+        #     raise Warning('mensaje antrada segunda firma')
         doc = etree.fromstring(message)
         signed_node = xmldsig(
             doc, digest_algorithm=u'sha1').sign(
@@ -292,25 +317,29 @@ version="1.0">{}{}</EnvioDTE>'''.format(doc, sign)
         #     method=methods.detached, algorithm=u'rsa-sha1',
         #     key=privkey.encode('ascii'))
         Transforms = '''<Transforms>
-<Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
-</Transforms>'''
+        <Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+      </Transforms>'''
         x509certificate = '''
     <X509Data>
       <X509Certificate>{}</X509Certificate>
     </X509Data>'''.format(cert.replace(BC, '').replace(EC, ''))
-
-        msg = etree.tostring(signed_node, pretty_print=True).replace(
-            'ds:', '').replace(':ds=', '=').replace(
-            '</KeyValue>', '''</KeyValue>{}'''.format(x509certificate)).replace(
-            '</DigestMethod ', Transforms+'</DigestMethod ')
-
+        msg = etree.tostring(signed_node, pretty_print=True)
+        msg = msg.replace(
+            '</ds:KeyValue>', '''</ds:KeyValue>{}'''.format(x509certificate)).replace(
+            '<ds:DigestMethod ', Transforms+'<ds:DigestMethod ').replace(
+            'ds:', '').replace(':ds=', '=')
+        print(msg)
         msg = msg if self.xml_validator(msg, 'sig') else ''
 
+        print('validacion %s' % type)
         if type=='doc':
             fulldoc = self.create_template_doc1(message, msg)
         elif type=='env':
             fulldoc = self.create_template_doc2(message, msg)
 
+        if type=='env':
+            print(fulldoc)
+            #raise Warning('fulldoc antes de validar env')
         fulldoc = fulldoc if self.xml_validator(fulldoc, type) else ''
         return fulldoc
 
@@ -490,8 +519,9 @@ encoding="ISO-8859-1"?>
 {}'''.format(self.sign_full_xml(envio_dte, signature_d['priv_key'],
                                 signature_d['cert'], 'OdooBMyA', 'env'))
 
+
                 print(envio_dte)
-                # raise Warning('fuck send!')
+                raise Warning('fuck send!')
 
                 invoice_obj.sii_xml_request = envio_dte
 
@@ -980,8 +1010,7 @@ exponent. AND DIGEST""")
             #         '</Documento_ID>', '</Documento>'))
             # sin remober indents
             xml_pret = etree.tostring(root, pretty_print=True).replace(
-            '<Documento_ID>', doc_id).replace(
-            '</Documento_ID>', '</Documento>')
+'<Documento_ID>', doc_id).replace('</Documento_ID>', '</Documento>')
             if dte_service in ['SII', 'SIIHOMO']:
                 envelope_efact = self.convert_encoding(xml_pret, 'ISO-8859-1')
                 # inv.sii_xml_request = envelope_efact
@@ -996,12 +1025,36 @@ exponent. AND DIGEST""")
                     envelope_efact, signature_d['priv_key'],
                     signature_d['cert'], doc_id_number)
                 _logger.info('Document signed!')
+
+                ## armado del sobre directamente sobre la variable envelope
+                # en lugar de guardar el documento en sii_xml_request
                 # la función de firma lo devuelve unicamente en estado positivo
                 # al hacer la validación embebida dentro de la misma funcion
-                inv.sii_xml_request = einvoice
-                inv.sii_result = 'NoEnviado'
-                # HASTA ACA LA FIRMA
+                # en lugar de guardarlo le pongo la otra firma directamente...*[]:
+                # provisionalmente creo la caratula para hacer un envio de la unica factura
+                # en un solo pasod
 
+                resol_data = self.get_resolution_data(self.company_id)
+                envio_dte = self.create_template_envio(
+                    dte['Encabezado']['Emisor']['RUTEmisor'],
+                    dte['Encabezado']['Receptor']['RUTRecep'],
+                    resol_data['dte_resolution_date'],
+                    resol_data['dte_resolution_number'],
+                    self.convert_timezone(
+                        datetime.strftime(datetime.now(), '%Y-%m-%d'),
+                        datetime.strftime(
+                            datetime.now(), '%H:%M:%S')).strftime(
+                        '%Y-%m-%dT%H:%M:%S'),
+                    inv.sii_document_class_id.sii_code, einvoice)
+
+                envio_dte = self.sign_full_xml(
+                    envio_dte, signature_d['priv_key'], signature_d['cert'],
+                    'OdooBMyA', 'env')
+                # print(envio_dte)
+                raise Warning('envio individual dte ')
+                #inv.sii_xml_request = einvoice
+                #inv.sii_result = 'NoEnviado'
+                # HASTA ACA LA FIRMA
             elif dte_service == 'EFACTURADELSUR':
                 # armado del envolvente rrespondiente a EACTURADELSUR
 
