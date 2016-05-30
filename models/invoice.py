@@ -174,6 +174,13 @@ connection_status = {
 class invoice(models.Model):
     _inherit = "account.invoice"
 
+    def split_cert(self, cert):
+        # certp = cert.replace('\n', '')
+        certf, j = '', 0
+        for i in range(0, 29):
+            certf += cert[76 * i:76 * (i + 1)] + '\n'
+        return certf
+
     def create_template_envio(self, RutEmisor, RutReceptor, FchResol, NroResol,
                               TmstFirmaEnv, TpoDTE, EnvioDTE):
         xml = '''<SetDTE ID="OdooBMyA">
@@ -321,8 +328,9 @@ version="1.0">
       </Transforms>'''
         x509certificate = '''
     <X509Data>
-      <X509Certificate>{}</X509Certificate>
-    </X509Data>'''.format(cert.replace(BC, '').replace(EC, ''))
+      <X509Certificate>
+{}</X509Certificate>
+</X509Data>'''.format(cert)
         msg = etree.tostring(signed_node, pretty_print=True)
         msg = msg.replace(
             '</ds:KeyValue>', '''</ds:KeyValue>{}'''.format(x509certificate)).replace(
@@ -1021,19 +1029,20 @@ exponent. AND DIGEST""")
                 envelope_efact = self.create_template_doc(envelope_efact)
                 # Inicio de Firma del dte
                 # print(envelope_efact)
+
+                ### formateo del certificado
+                certp = signature_d['cert'].replace(
+                    BC, '').replace(EC, '').replace('\n', '')
+                # certf =
+
+                ## firma del documento
                 einvoice = self.sign_full_xml(
                     envelope_efact, signature_d['priv_key'],
-                    signature_d['cert'], doc_id_number)
+                    self.split_cert(certp), doc_id_number)
                 _logger.info('Document signed!')
 
                 ## armado del sobre directamente sobre la variable envelope
-                # en lugar de guardar el documento en sii_xml_request
-                # la función de firma lo devuelve unicamente en estado positivo
-                # al hacer la validación embebida dentro de la misma funcion
-                # en lugar de guardarlo le pongo la otra firma directamente...*[]:
-                # provisionalmente creo la caratula para hacer un envio de la unica factura
-                # en un solo pasod
-
+                # (esquema 1 documento = 1 sobre)
                 resol_data = self.get_resolution_data(self.company_id)
                 envio_dte = self.create_template_envio(
                     dte['Encabezado']['Emisor']['RUTEmisor'],
@@ -1047,10 +1056,12 @@ exponent. AND DIGEST""")
                         '%Y-%m-%dT%H:%M:%S'),
                     inv.sii_document_class_id.sii_code, einvoice)
 
+                # firma del sobre
                 envio_dte = self.sign_full_xml(
-                    envio_dte, signature_d['priv_key'], signature_d['cert'],
+                    envio_dte, signature_d['priv_key'], certp,
                     'OdooBMyA', 'env')
-                # print(envio_dte)
+
+
                 raise Warning('envio individual dte ')
                 #inv.sii_xml_request = einvoice
                 #inv.sii_result = 'NoEnviado'
