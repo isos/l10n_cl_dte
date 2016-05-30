@@ -275,26 +275,29 @@ class invoice(models.Model):
         return xml
 
     def create_template_doc(self, doc):
-        xml = u'''<DTE xmlns="http://www.sii.cl/SiiDte" version="1.0">
+        xml = '''<DTE xmlns="http://www.sii.cl/SiiDte" version="1.0">
   <!-- Odoo Implementation Blanco Martin -->
 {}</DTE>'''.format(doc)
         # create_template_doc
         # anulo el efecto de la funcion
         # para hacer un detached
-        return doc
-
-    def create_template_doc1(self, doc, sign):
-        xml = '''<DTE xmlns="http://www.sii.cl/SiiDte" version="1.0">
-{}{}</DTE>'''.format(doc, sign)
         return xml
 
-    def create_template_doc2(self, doc, sign):
+    def create_template_env(self, doc):
         xml = '''<?xml version="1.0" encoding="ISO-8859-1"?>
 <EnvioDTE xmlns="http://www.sii.cl/SiiDte" \
 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" \
 xsi:schemaLocation="http://www.sii.cl/SiiDte EnvioDTE_v10.xsd" \
 version="1.0">
-{}{}</EnvioDTE>'''.format(doc, sign)
+{}</EnvioDTE>'''.format(doc)
+        return xml
+
+    def create_template_doc1(self, doc, sign):
+        xml = doc.replace('</DTE>', '') + sign + '</DTE>'
+        return xml
+
+    def create_template_env1(self, doc, sign):
+        xml = doc.replace('</EnvioDTE>', '') + sign + '</EnvioDTE>'
         return xml
 
     def sign_seed(self, message, privkey, cert):
@@ -311,22 +314,16 @@ version="1.0">
     def sign_full_xml(self, message, privkey, cert, uri, type='doc'):
         print('mensaje de entrada: %s' % type)
         print(message)
-        # if type=='env':
-        #     print('Asi entra el mensaje para la segunda firma')
-        #     print(message)
-        #     raise Warning('mensaje antrada segunda firma')
+
         doc = etree.fromstring(message)
+
         signed_node = xmldsig(
             doc, digest_algorithm=u'sha1').sign(
             method=methods.detached, algorithm=u'rsa-sha1',
             c14n_algorithm=u'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
             reference_uri='#'+uri,
             key=privkey.encode('ascii'))
-        # welcome back to this library... let see what happen this time
-        # signed_node = xmldsig(
-        #     doc, digest_algorithm=u'sha1').sign(
-        #     method=methods.detached, algorithm=u'rsa-sha1',
-        #     key=privkey.encode('ascii'))
+
         Transforms = '''<Transforms>
         <Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
       </Transforms>'''
@@ -340,18 +337,19 @@ version="1.0">
             '</ds:KeyValue>', '''</ds:KeyValue>{}'''.format(x509certificate)).replace(
             '<ds:DigestMethod ', Transforms+'<ds:DigestMethod ').replace(
             'ds:', '').replace(':ds=', '='))
+        print('firma......')
         print(msg)
+        print('validacion de firma......')
         msg = msg if self.xml_validator(msg, 'sig') else ''
 
-        print('validacion %s' % type)
         if type=='doc':
             fulldoc = self.create_template_doc1(message, msg)
         elif type=='env':
-            fulldoc = self.create_template_doc2(message, msg)
+            fulldoc = self.create_template_env1(message, msg)
 
-        if type=='env':
-            print(fulldoc)
-            #raise Warning('fulldoc antes de validar env')
+        print('documento de salida: %s' % type)
+        print(fulldoc)
+        print('entro a validacion: %s' % type)
         fulldoc = fulldoc if self.xml_validator(fulldoc, type) else ''
         return fulldoc
 
@@ -1062,6 +1060,7 @@ exponent. AND DIGEST""")
                         '%Y-%m-%dT%H:%M:%S'),
                     inv.sii_document_class_id.sii_code, einvoice)
 
+                envio_dte  = self.create_template_env(envio_dte)
                 # firma del sobre
                 envio_dte = self.sign_full_xml(
                     envio_dte, signature_d['priv_key'], certp,
