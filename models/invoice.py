@@ -388,7 +388,7 @@ version="1.0">
         return resolution_data
 
     @api.multi
-    def send_xml_file(self, envio_dte):
+    def send_xml_file(self, envio_dte, inv):
         # seteo esta variable para saltear el proceso de envío masivo
         # (esto es un envio con varios documentos)
         envio_masivo = False
@@ -564,10 +564,20 @@ NT 5.0; YComp 5.0.2.4)',
                 'Host': '{}'.format(url),
                 'Cookie': 'TOKEN = {}'.format(token)
             }
+
+            params =  collections.OrderedDict()
+            params['rutSender'] = signature_d[subject_serial_number][2:-1]
+            params['dvSender'] = signature_d[subject_serial_number][-1]
+            params['rutCompany'] = inv.company_id.vat[2:-1]
+            params['dvCompany'] = inv.company_id.vat[-1]
+            params['archivo'] = 'aca va envio_dte, pero no lo pongo para debug...'
+            }
+            print(params)
             print(headers)
-            # raise Warning('Fuck headerssss')
-            response = pool.urlopen('POST', url + post,
-                                    headers=headers, body=envio_dte)
+            raise Warning('Fuck headerssss and parameterrsss!')
+            response = pool.request('POST', url, params, headers)
+            # response = pool.urlopen('POST', url + post,
+            #                         headers=headers, body=envio_dte)
             print('response:')
             print(response.data)
             print(response.status)
@@ -1047,7 +1057,7 @@ exponent. AND DIGEST""")
 
                 inv.sii_xml_request = envio_dte
                 inv.sii_result = 'NoEnviado'
-                inv.sii_xml_response = self.send_xml_file(envio_dte)
+                inv.sii_xml_response = self.send_xml_file(envio_dte, inv)
                 raise Warning('envio individual dte...')
 
             elif dte_service == 'EFACTURADELSUR':
