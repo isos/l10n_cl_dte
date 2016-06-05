@@ -564,14 +564,12 @@ NT 5.0; YComp 5.0.2.4)',
                 'Host': '{}'.format(url),
                 'Cookie': 'TOKEN = {}'.format(token)
             }
-
             params =  collections.OrderedDict()
-            params['rutSender'] = signature_d[subject_serial_number][2:-1]
-            params['dvSender'] = signature_d[subject_serial_number][-1]
+            params['rutSender'] = signature_d['subject_serial_number'][:8]
+            params['dvSender'] = signature_d['subject_serial_number'][-1]
             params['rutCompany'] = inv.company_id.vat[2:-1]
             params['dvCompany'] = inv.company_id.vat[-1]
             params['archivo'] = 'aca va envio_dte, pero no lo pongo para debug...'
-            }
             print(params)
             print(headers)
             raise Warning('Fuck headerssss and parameterrsss!')
