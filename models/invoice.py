@@ -706,45 +706,6 @@ exponent. AND DIGEST""")
                 'exponent': base64.b64encode(rsa_m.e),
                 'digest': base64.b64encode(self.digest(MESSAGE))}
 
-#     def signmessage1(self, dd, privkey, pubk='', digst=''):
-#         ddd = self.digest(dd)
-#         CafPK = M2Crypto.RSA.load_key_string(privkey)
-#         firma = CafPK.sign(ddd)
-#         FRMT = base64.b64encode(firma)
-#         _logger.info('Document signature in base64: %s' % FRMT)
-#         # agregado nuevo para que no sea necesario mandar la clave publica
-#         if pubk=='':
-#             bio = M2Crypto.BIO.MemoryBuffer(privkey)
-#             rsa = M2Crypto.RSA.load_key_bio(bio)
-#         else:
-#             # estas son las dos lineas originales
-#             bio = M2Crypto.BIO.MemoryBuffer(pubk)
-#             rsa = M2Crypto.RSA.load_pub_key_bio(bio)
-#         # fin del cambio
-#         pubkey = M2Crypto.EVP.PKey()
-#         pubkey.assign_rsa(rsa)
-#         # if you need a different digest than the default 'sha1':
-#         pubkey.reset_context(md='sha1')
-#         pubkey.verify_init()
-#         pubkey.verify_update(dd)
-#         _logger.info('Validating public key using EVP PK verification....')
-#         if pubkey.verify_final(firma) == 1:
-#             if digst=='':
-#                 _logger.info("""Signature verified! Returning signature, modulus \
-# and exponent.""")
-#                 return {
-#                     'firma': FRMT, 'modulus': base64.b64encode(rsa.n),
-#                     'exponent': base64.b64encode(rsa.e)}
-#             else:
-#                 _logger.info("""Signature verified! Returning signature, modulus \
-#     and exponent. AND DIGEST""")
-#                 return {
-#                     'firma': FRMT, 'modulus': base64.b64encode(rsa.n),
-#                     'exponent': base64.b64encode(rsa.e),
-#                     'digest': base64.b64encode(ddd)}
-#
-    #### definición del modelo
-
     sii_batch_number = fields.Integer(
         copy=False,
         string='Batch Number',
@@ -1080,7 +1041,6 @@ exponent. AND DIGEST""")
 
             elif dte_service == 'EFACTURADELSUR':
                 # armado del envolvente rrespondiente a EACTURADELSUR
-
                 envelope_efact = '''<?xml version="1.0" encoding="utf-8"?>
 <soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
 <soap12:Body>
@@ -1114,5 +1074,11 @@ exponent. AND DIGEST""")
                 pass
             # en caso que no sea DTE, el proceso es finalizado sin
             # consecuencias (llamando a super
+            elif dte_service == 'SII MiPyme':
+                # para los que instalaron el módulo y usan portal mipyme
+                # en realidad, no es necesario instalar cl_dte para usar mipyme
+                # dado que cl_invoice contempla la posibilidad sin necesidad
+                # de hacerlo
+                pass
             else:
                 _logger.info('NO HUBO NINGUNA OPCION DTE VALIDA')
