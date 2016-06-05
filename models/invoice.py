@@ -389,6 +389,7 @@ version="1.0">
             return ''
 
     def get_digital_signature(self, comp_id):
+
         _logger.info(_('Executing digital signature function'))
         _logger.info('Service provider for this company is %s' % comp_id)
         if comp_id.dte_service_provider in ['SIIHOMO', 'SII']:
@@ -417,6 +418,10 @@ version="1.0">
 
     @api.multi
     def send_xml_file(self):
+        # seteo esta variable para saltear el proceso de envío masivo
+        # (esto es un envio con varios documentos)
+        envio_masivo = False
+
         _logger.info('Entering Send XML Function')
         _logger.info(
             'Service provider is: %s' % self.company_id.dte_service_provider)
@@ -439,7 +444,7 @@ version="1.0">
             self.sii_xml_response = response.data
             self.sii_result = 'Enviado'
 
-        elif self.company_id.dte_service_provider in ['SII', 'SIIHOMO']:
+        elif self.company_id.dte_service_provider in ['SII', 'SIIHOMO'] and envio_masivo = True:
             _logger.info('Entering SII Alternative...')
             signature_d = self.get_digital_signature(self.company_id)
             resol_data = self.get_resolution_data(self.company_id)
@@ -537,37 +542,42 @@ encoding="ISO-8859-1"?>
                 raise Warning('fuck send!')
 
                 invoice_obj.sii_xml_request = envio_dte
-
-                ###### comienzo de bloque de autenticacion #########
-                ### Hipótesis: un envío por cada RUT de receptor ###
+        elif self.company_id.dte_service_provider in ['SII', 'SIIHOMO'] and envio_masivo = False:
+            # en esta etapa el proceso de armado de XML me entrega el xml completo
+            # que debo enviar, y no hace falta construirlo
+            # Se puede dejar la autenticación completa en esta etapa más adelante
+            # estos comentarios eran antes... ahora vamos con un solo envio por invoice
+            #   ###### comienzo de bloque de autenticacion #########
+            #   ### Hipótesis: un envío por cada RUT de receptor ###
+            # all el código estaba indentado más adentro antes....
+            if 1==1:
                 if 1==1:
-                    if 1==1:
-                        # tengo que sacar de algun lado las claves
-                        signature_d = self.get_digital_signature_pem(
-                            self.company_id)
+                    # tengo que sacar de algun lado las claves
+                    signature_d = self.get_digital_signature_pem(
+                        self.company_id)
 
-                        seed = self.get_seed()
-                        _logger.info(_("Seed is:  {}").format(seed))
-                        template_string = self.create_template_seed(seed)
-                        seed_firmado = self.sign_seed(
-                            template_string, signature_d['priv_key'],
-                            signature_d['cert'])
-                        token = self.get_token(seed_firmado)
-                        _logger.info(_("Token is: {}").format(token))
-                        raise Warning('fuck token!')
-                    else:
-                        raise Warning(connection_status[response.e])
+                    seed = self.get_seed()
+                    _logger.info(_("Seed is:  {}").format(seed))
+                    template_string = self.create_template_seed(seed)
+                    seed_firmado = self.sign_seed(
+                        template_string, signature_d['priv_key'],
+                        signature_d['cert'])
+                    token = self.get_token(seed_firmado)
+                    _logger.info(_("Token is: {}").format(token))
+                    raise Warning('fuck token!')
                 else:
-                    #except:
-                    # no pudo hacer el envío
-                    inv.sii_result = 'NoEnviado'
-                    raise Warning('Error')
-                ######### fin de bloque de autenticacion ###########
-                ########### inicio del bloque de envio #############
-                ###
-                pass
-                ###
-                ############# fin del bloque de envio ##############
+                    raise Warning(connection_status[response.e])
+            else:
+                #except:
+                # no pudo hacer el envío
+                inv.sii_result = 'NoEnviado'
+                raise Warning('Error')
+            ######### fin de bloque de autenticacion ###########
+            ########### inicio del bloque de envio #############
+            ###
+            pass
+            ###
+            ############# fin del bloque de envio ##############
 
     # funcion para descargar el XML
     @api.multi
