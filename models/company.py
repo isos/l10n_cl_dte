@@ -17,6 +17,7 @@ class dteEmail(models.Model):
             ('EFACTURADELSUR', 'efacturadelsur.cl'),
             ('SIIHOMO', 'SII - Certification process'),
             ('SII', 'www.sii.cl'),
+            ('SII MiPyme', 'SII - Portal MiPyme'),
         ), 'DTE Service Provider', help='''Please select your company service \
 provider for DTE service. Select \'None\' if you use manual invoices, fiscal \
 controllers or MiPYME Sii Service. Also take in account that if you select \

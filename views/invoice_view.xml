@@ -25,7 +25,6 @@
                         </header>
                         <group>
                             <field name='sii_batch_number'/>
-                            <!--<field name='sii_barcode'/>-->
                             <field name='sii_barcode_img' widget="image"
                                 attrs="{'invisible':[('sii_result', '=', '')]}"/>
                             <field name='sii_message'
@@ -34,7 +33,8 @@
                                 attrs="{'invisible':[('sii_result', '=', '')]}"/>
                             <field name='sii_xml_response'
                                 attrs="{'invisible':[('sii_result', 'in', ['','NoEnviado'])]}"/>
-
+                            <field name='sii_send_ident'
+                                attrs="{'invisible':[('sii_result', 'in', ['','NoEnviado'])]}"/>
                         </group>
                     </page>
                 </notebook>

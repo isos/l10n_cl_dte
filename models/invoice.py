@@ -3,6 +3,8 @@
 # For copyright and license notices, see __openerp__.py file in module root
 # directory
 ##############################################################################
+
+
 from openerp import fields, models, api, _
 from openerp.exceptions import Warning
 from datetime import datetime, timedelta
@@ -407,18 +409,10 @@ version="1.0">
 
     def get_resolution_data(self, comp_id):
         _logger.info('Entering function get_resolution_data')
-        _logger.info('Service provider for this company is %s' % comp_id)
-        if comp_id.dte_service_provider == 'SIIHOMO':
-            resolution_date = '2015-05-08'
-            resolution_numb = '0'
-            _logger.info('Using hardcoded resolution date and resolution \
-number for Certification process')
-        else:
-            resolution_date = comp_id.dte_resolution_date
-            resolution_numb = comp_id.dte_resolution_number
+        _logger.info('Service provider for this company is %s' % comp_id.dte_service_provider)
         resolution_data = {
-            'dte_resolution_date': resolution_date,
-            'dte_resolution_number': resolution_numb}
+            'dte_resolution_date': comp_id.dte_resolution_date,
+            'dte_resolution_number': comp_id.dte_resolution_number}
         return resolution_data
 
     @api.multi
@@ -772,6 +766,9 @@ exponent. AND DIGEST""")
         copy=False)
     sii_xml_response = fields.Text(
         string='SII XML Response',
+        copy=False)
+    sii_send_ident = fields.Text(
+        string='SII Send Identification',
         copy=False)
     sii_result = fields.Selection([
         ('', 'n/a'),
