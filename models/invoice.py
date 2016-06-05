@@ -51,10 +51,10 @@ except:
     pass
 
 # from urllib3 import HTTPConnectionPool
-# pool = urllib3.PoolManager()
 urllib3.disable_warnings()
-ca_certs = "/etc/ssl/certs/ca-certificates.crt"
-pool = urllib3.PoolManager(cert_reqs='CERT_REQUIRED', ca_certs=ca_certs)
+pool = urllib3.PoolManager()
+# ca_certs = "/etc/ssl/certs/ca-certificates.crt"
+# pool = urllib3.PoolManager(cert_reqs='CERT_REQUIRED', ca_certs=ca_certs)
 
 # from inspect import currentframe, getframeinfo
 # estas 2 lineas son para imprimir el numero de linea del script
@@ -545,24 +545,35 @@ encoding="ISO-8859-1"?>
             url = 'https://maullin.sii.cl'
             post = '/cgi_dte/UPL/DTEUpload'
             # port = 443
-            response = pool.urlopen('POST', url + post,
-                                    headers={
-                                        'Accept': 'image/gif,image/x-xbitmap,\
+            # Armo el encabezado por separado para poder debuggear
+            headers = {
+                'Accept': '''image/gif,image/x-xbitmap,\
 image/jpeg,image/pjpeg,application/vnd.ms-powerpoint,application/ms-excel,\
-application/msword,*/*',
-                                        'Accept-Language': 'es-cl',
-                                        'Accept-Encoding': 'gzip, deflate',
-                                        'Content-Type': 'multipart/form-data: boundary={boundary d23e2a11301c4}',
-                                        'charset': 'ISO-8859-1',
-                                        'User-Agent': 'Mozilla/4.0 (compatible; PROG 1.0; Windows NT 5.0; YComp 5.0.2.4)',
-                                        'Content-Length': '{len(envio_dte)}',
-                                        'Referer': '{http://blancomartin.cl/enviodte}',
-                                        'Cache-Control': 'no-cache',
-                                        'Cookie': 'TOKEN = {}'.format(token)
-                                     }, body=envio_dte)
+application/msword,*/*''',
+                'Accept-Language': 'es-cl',
+                'Accept-Encoding': 'gzip, deflate',
+                'Content-Type': 'multipart/form-data: boundary=-----------------9812634f1130lc4',
+                'charset': 'ISO-8859-1',
+                'User-Agent': 'Mozilla/4.0 (compatible; PROG 1.0; Windows \
+NT 5.0; YComp 5.0.2.4)',
+                'Content-Length': '{}'.format(len(envio_dte)),
+                'Referer': '{}'.format(self.company_id.website),
+                'Cache-Control': 'no-cache',
+                'Connection': 'Keep-Alive',
+                'Cache-Control': 'no-cache',
+                'Host': '{}'.format(url),
+                'Cookie': 'TOKEN = {}'.format(token)
+            }
+            print(headers)
+            # raise Warning('Fuck headerssss')
+            response = pool.urlopen('POST', url + post,
+                                    headers=headers, body=envio_dte)
             print('response:')
-            print(response)
-            respuesta_dict = xmltodict.parse(response)
+            print(response.data)
+            print(response.status)
+            if response.status != 200:
+                raise Warning('Fuck response!')
+            respuesta_dict = xmltodict.parse(response.data)
             print(respuesta_dict)
             if respuesta_dict['RECEPCIONDTE']['STATUS'] != '0':
                 print('status no es 0')
