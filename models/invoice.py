@@ -51,7 +51,10 @@ except:
     pass
 
 # from urllib3 import HTTPConnectionPool
-pool = urllib3.PoolManager()
+# pool = urllib3.PoolManager()
+urllib3.disable_warnings()
+ca_certs = "/etc/ssl/certs/ca-certificates.crt"
+pool = urllib3.PoolManager(cert_reqs='CERT_REQUIRED', ca_certs=ca_certs)
 
 # from inspect import currentframe, getframeinfo
 # estas 2 lineas son para imprimir el numero de linea del script
@@ -92,7 +95,7 @@ except ImportError:
 try:
     import cchardet
 except ImportError:
-    _logger.info('Cannot import hashlib library')
+    _logger.info('Cannot import cchardet library')
 
 try:
     from SOAPpy import SOAPProxy
@@ -118,39 +121,7 @@ afeqWjiRVMvV4+s4Q==</FRMA></CAF><TSTED>2014-04-24T12:02:20</TSTED></DD>\
 <FRMT algoritmo="SHA1withRSA">jiuOQHXXcuwdpj8c510EZrCCw+pfTVGTT7obWm/\
 fHlAa7j08Xff95Yb2zg31sJt6lMjSKdOK+PQp25clZuECig==</FRMT></TED>"""
 result = xmltodict.parse(timbre)
-# result es un OrderedDict patrón
 
-# porcion_firma_documento = """\
-# <Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
-# <SignedInfo>
-# <CanonicalizationMethod \
-# Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315" />
-# <SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1" />
-# <Reference URI="#{0}">
-# <Transforms>
-# <Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315" />
-# </Transforms>
-# <DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1" />
-# <DigestValue>{1}</DigestValue>
-# </Reference>
-# </SignedInfo>
-# <SignatureValue>{2}</SignatureValue>
-# <KeyInfo>
-# <KeyValue>
-# <RSAKeyValue>
-# <Modulus>{3}</Modulus>
-# <Exponent>{4}</Exponent>
-# </RSAKeyValue>
-# </KeyValue>
-# <X509Data>
-# <X509Certificate>
-# {5}
-# </X509Certificate>
-# </X509Data>
-# </KeyInfo>
-# </Signature>
-# """
-#
 server_url = 'https://maullin.sii.cl/DTEWS/'
 
 BC = '''-----BEGIN CERTIFICATE-----\n'''
@@ -417,7 +388,7 @@ version="1.0">
         return resolution_data
 
     @api.multi
-    def send_xml_file(self):
+    def send_xml_file(self, envio_dte):
         # seteo esta variable para saltear el proceso de envío masivo
         # (esto es un envio con varios documentos)
         envio_masivo = False
@@ -444,7 +415,7 @@ version="1.0">
             self.sii_xml_response = response.data
             self.sii_result = 'Enviado'
 
-        elif self.company_id.dte_service_provider in ['SII', 'SIIHOMO'] and envio_masivo = True:
+        elif self.company_id.dte_service_provider in ['SII', 'SIIHOMO'] and envio_masivo == True:
             _logger.info('Entering SII Alternative...')
             signature_d = self.get_digital_signature(self.company_id)
             resol_data = self.get_resolution_data(self.company_id)
@@ -537,12 +508,9 @@ encoding="ISO-8859-1"?>
 {}'''.format(self.sign_full_xml(envio_dte, signature_d['priv_key'],
                                 signature_d['cert'], 'OdooBMyA', 'env'))
 
-
                 print(envio_dte)
-                raise Warning('fuck send!')
-
                 invoice_obj.sii_xml_request = envio_dte
-        elif self.company_id.dte_service_provider in ['SII', 'SIIHOMO'] and envio_masivo = False:
+        elif self.company_id.dte_service_provider in ['SII', 'SIIHOMO'] and envio_masivo == False:
             # en esta etapa el proceso de armado de XML me entrega el xml completo
             # que debo enviar, y no hace falta construirlo
             # Se puede dejar la autenticación completa en esta etapa más adelante
@@ -550,12 +518,11 @@ encoding="ISO-8859-1"?>
             #   ###### comienzo de bloque de autenticacion #########
             #   ### Hipótesis: un envío por cada RUT de receptor ###
             # all el código estaba indentado más adentro antes....
+            _logger.info(_('Entering individual sending...'))
             if 1==1:
-                if 1==1:
-                    # tengo que sacar de algun lado las claves
+                try:
                     signature_d = self.get_digital_signature_pem(
                         self.company_id)
-
                     seed = self.get_seed()
                     _logger.info(_("Seed is:  {}").format(seed))
                     template_string = self.create_template_seed(seed)
@@ -564,8 +531,7 @@ encoding="ISO-8859-1"?>
                         signature_d['cert'])
                     token = self.get_token(seed_firmado)
                     _logger.info(_("Token is: {}").format(token))
-                    raise Warning('fuck token!')
-                else:
+                except:
                     raise Warning(connection_status[response.e])
             else:
                 #except:
@@ -573,11 +539,39 @@ encoding="ISO-8859-1"?>
                 inv.sii_result = 'NoEnviado'
                 raise Warning('Error')
             ######### fin de bloque de autenticacion ###########
+
             ########### inicio del bloque de envio #############
             ###
-            pass
-            ###
-            ############# fin del bloque de envio ##############
+            url = 'https://maullin.sii.cl'
+            post = '/cgi_dte/UPL/DTEUpload'
+            # port = 443
+            response = pool.urlopen('POST', url + post,
+                                    headers={
+                                        'Accept': 'image/gif,image/x-xbitmap,\
+image/jpeg,image/pjpeg,application/vnd.ms-powerpoint,application/ms-excel,\
+application/msword,*/*',
+                                        'Accept-Language': 'es-cl',
+                                        'Accept-Encoding': 'gzip, deflate',
+                                        'Content-Type': 'multipart/form-data: boundary={boundary d23e2a11301c4}',
+                                        'charset': 'ISO-8859-1',
+                                        'User-Agent': 'Mozilla/4.0 (compatible; PROG 1.0; Windows NT 5.0; YComp 5.0.2.4)',
+                                        'Content-Length': '{len(envio_dte)}',
+                                        'Referer': '{http://blancomartin.cl/enviodte}',
+                                        'Cache-Control': 'no-cache',
+                                        'Cookie': 'TOKEN = {}'.format(token)
+                                     }, body=envio_dte)
+            print('response:')
+            print(response)
+            respuesta_dict = xmltodict.parse(response)
+            print(respuesta_dict)
+            if respuesta_dict['RECEPCIONDTE']['STATUS'] != '0':
+                print('status no es 0')
+                _logger.info(connection_status[
+                    respuesta_dict['RECEPCIONDTE']['STATUS']])
+            else:
+                print('status es 0')
+                _logger.info(respuesta_dict['RECEPCIONDTE']['TRACKID'])
+            return respuesta_dict
 
     # funcion para descargar el XML
     @api.multi
@@ -1079,11 +1073,11 @@ exponent. AND DIGEST""")
                     envio_dte, signature_d['priv_key'], certp,
                     'OdooBMyA', 'env')
 
+                inv.sii_xml_request = envio_dte
+                inv.sii_result = 'NoEnviado'
+                inv.sii_xml_response = self.send_xml_file(envio_dte)
+                raise Warning('envio individual dte...')
 
-                raise Warning('envio individual dte ')
-                #inv.sii_xml_request = einvoice
-                #inv.sii_result = 'NoEnviado'
-                # HASTA ACA LA FIRMA
             elif dte_service == 'EFACTURADELSUR':
                 # armado del envolvente rrespondiente a EACTURADELSUR
 
