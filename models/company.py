@@ -11,10 +11,11 @@ class dteEmail(models.Model):
     dte_service_provider = fields.Selection(
         (
             ('', 'None'),
+            ('EFACTURADELSUR', 'efacturadelsur.cl'),
             ('ENTERNET', 'enternet.cl'),
             ('FACTURACION', 'facturacion.cl'),
             ('FACTURAENLINEA', 'facturaenlinea.cl'),
-            ('EFACTURADELSUR', 'efacturadelsur.cl'),
+            ('LIBREDTE', 'LibreDTE'),
             ('SIIHOMO', 'SII - Certification process'),
             ('SII', 'www.sii.cl'),
             ('SII MiPyme', 'SII - Portal MiPyme'),

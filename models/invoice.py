@@ -143,7 +143,12 @@ connection_status = {
     '9': 'Sistema Bloqueado',
     'Otro': 'Error Interno.',
 }
-
+'''
+Extensión del modelo de datos para contener parámetros globales necesarios
+ para todas las integraciones de factura electrónica.
+ @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+ @version: 2016-06-11
+'''
 class invoice(models.Model):
     _inherit = "account.invoice"
 
@@ -154,6 +159,11 @@ class invoice(models.Model):
             certf += cert[76 * i:76 * (i + 1)] + '\n'
         return certf
 
+    '''
+    Funcion que permite crear una plantilla para el EnvioDTE
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2016-06-01
+    '''
     def create_template_envio(self, RutEmisor, RutReceptor, FchResol, NroResol,
                               TmstFirmaEnv, TpoDTE, EnvioDTE):
         signature_d = self.get_digital_signature_pem(self.company_id)
@@ -177,6 +187,12 @@ class invoice(models.Model):
            FchResol, NroResol, TmstFirmaEnv, TpoDTE, EnvioDTE)
         return xml
 
+    '''
+    Funcion para convertir la timezone. Realizada para probar si el problema de
+    error de firma proviene de la fecha.
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2016-06-01
+    '''
     def convert_timezone(self, dia, time):
         print(datetime.strftime(datetime.now(), '%Y-%m-%dT%H:%M:%S'))
         print(datetime.strftime(datetime.now() - timedelta(hours=4), '%Y-%m-%dT%H:%M:%S'))
@@ -195,6 +211,13 @@ class invoice(models.Model):
         # return local_dt
         return datetime.now()
 
+    '''
+    Funcion para remover los indents del documento previo a enviar el xml
+     a firmaar. Realizada para probar si el problema de
+    error de firma proviene de los indents.
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2016-06-01
+    '''
     def remove_indents(self, xml):
         return xml.replace(
             '        <','<').replace(
@@ -202,6 +225,24 @@ class invoice(models.Model):
             '    <','<').replace(
             '  <','<')
 
+
+    '''
+    Funcion auxiliar para conversion de codificacion de strings
+     proyecto experimentos_dte
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2014-12-01
+    '''
+    def convert_encoding(self, data, new_coding = 'UTF-8'):
+        encoding = cchardet.detect(data)['encoding']
+        if new_coding.upper() != encoding.upper():
+            data = data.decode(encoding, data).encode(new_coding)
+        return data
+
+    '''
+    Funcion auxiliar para saber que codificacion tiene el string
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2016-06-01
+    '''
     def whatisthis(self, s):
         if isinstance(s, str):
             _logger.info("ordinary string")
@@ -210,6 +251,12 @@ class invoice(models.Model):
         else:
             _logger.info("not a string")
 
+    '''
+    Funcion para validar los xml generados contra el esquema que le corresponda
+    segun el tipo de documento.
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2016-06-01
+    '''
     def xml_validator(self, some_xml_string, validacion='doc'):
         if 1==1:
             validacion_type = {
@@ -229,7 +276,13 @@ class invoice(models.Model):
                 _logger.info(_("The Document XML file has error: %s") % e.args)
                 raise Warning(_('XML Malformed Error %s') % e.args)
 
-    ### funciones usadas en la autenticacion
+    '''
+    Funcion usada en autenticacion en SII
+    Obtencion de la semilla desde el SII.
+    Basada en función de ejemplo mostrada en el sitio edreams.cl
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2015-04-01
+    '''
     def get_seed(self):
         url = server_url + 'CrSeed.jws?WSDL'
         ns = 'urn:'+server_url + 'CrSeed.jws'
@@ -238,6 +291,13 @@ class invoice(models.Model):
         semilla = root[0][0].text
         return semilla
 
+    '''
+    Funcion usada en autenticacion en SII
+    Creacion de plantilla xml para realizar el envio del token
+    Previo a realizar su firma
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2016-06-01
+    '''
     def create_template_seed(self, seed):
         xml = u'''<getToken>
 <item>
@@ -247,6 +307,13 @@ class invoice(models.Model):
 '''.format(seed)
         return xml
 
+    '''
+    Funcion usada en autenticacion en SII
+    Creacion de plantilla xml para envolver el DTE
+    Previo a realizar su firma (1)
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2016-06-01
+    '''
     def create_template_doc(self, doc):
         xml = '''<DTE xmlns="http://www.sii.cl/SiiDte" version="1.0">
   <!-- Odoo Implementation Blanco Martin -->
@@ -256,6 +323,13 @@ class invoice(models.Model):
         # para hacer un detached
         return xml
 
+    '''
+    Funcion usada en autenticacion en SII
+    Creacion de plantilla xml para envolver el Envio de DTEs
+    Previo a realizar su firma (2da)
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2016-06-01
+    '''
     def create_template_env(self, doc):
         xml = '''<?xml version="1.0" encoding="ISO-8859-1"?>
 <EnvioDTE xmlns="http://www.sii.cl/SiiDte" \
@@ -265,14 +339,36 @@ version="1.0">
 {}</EnvioDTE>'''.format(doc)
         return xml
 
+    '''
+    Funcion usada en autenticacion en SII
+    Insercion del nodo de firma (1ra) dentro del DTE
+    Una vez firmado.
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2016-06-01
+    '''
     def create_template_doc1(self, doc, sign):
         xml = doc.replace('</DTE>', '') + sign + '</DTE>'
         return xml
 
+    '''
+    Funcion usada en autenticacion en SII
+    Insercion del nodo de firma (2da) dentro del DTE
+    Una vez firmado.
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2016-06-01
+    '''
     def create_template_env1(self, doc, sign):
         xml = doc.replace('</EnvioDTE>', '') + sign + '</EnvioDTE>'
         return xml
 
+    '''
+    Funcion usada en autenticacion en SII
+    Firma de la semilla utilizando biblioteca signxml
+    De autoria de Andrei Kislyuk https://github.com/kislyuk/signxml
+    (en este caso particular esta probada la efectividad de la libreria)
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2016-06-01
+    '''
     def sign_seed(self, message, privkey, cert):
         doc = etree.fromstring(message)
         signed_node = xmldsig(
@@ -284,6 +380,38 @@ version="1.0">
             signed_node, pretty_print=True).replace('ds:', '')
         return msg
 
+    '''
+    Funcion usada en autenticacion en SII
+    Obtencion del token a partir del envio de la semilla firmada
+    Basada en función de ejemplo mostrada en el sitio edreams.cl
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2016-06-01
+    '''
+    def get_token(self, seed_file):
+        url = server_url + 'GetTokenFromSeed.jws?WSDL'
+        ns = 'urn:'+ server_url +'GetTokenFromSeed.jws'
+        _server = SOAPProxy(url, ns)
+        tree = etree.fromstring(seed_file)
+        ss = etree.tostring(tree, pretty_print=True, encoding='iso-8859-1')
+        respuesta = etree.fromstring(_server.getToken(ss))
+        token = respuesta[0][0].text
+        return token
+
+    '''
+    Funcion usada en SII
+    Firma de xml en 1ra y 2da firma (dte y enviodte)
+    utilizando biblioteca signxml,
+    De autoria de Andrei Kislyuk https://github.com/kislyuk/signxml
+    (en este caso particular esta en duda la efectividad de la libreria
+    dado que todo parece estar bien pero al momento de envio de la firma
+    aparece un error).
+    Los valores de tag que devuelve la biblioteca contienen un prefijo "ds"
+    el cual es removido para que no de error de validación de schema de firma.
+    Notar que no se esta alterando el documento firmado porque lo que se altera
+    son solo los nodos de firma para compatibilizar con schema del sii.
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2016-06-01
+    '''
     def sign_full_xml(self, message, privkey, cert, uri, type='doc'):
         print('mensaje de entrada: %s' % type)
         print(message)
@@ -332,16 +460,17 @@ version="1.0">
         fulldoc = fulldoc if self.xml_validator(fulldoc, type) else ''
         return fulldoc
 
-    def get_token(self, seed_file):
-        url = server_url + 'GetTokenFromSeed.jws?WSDL'
-        ns = 'urn:'+ server_url +'GetTokenFromSeed.jws'
-        _server = SOAPProxy(url, ns)
-        tree = etree.fromstring(seed_file)
-        ss = etree.tostring(tree, pretty_print=True, encoding='iso-8859-1')
-        respuesta = etree.fromstring(_server.getToken(ss))
-        token = respuesta[0][0].text
-        return token
-
+    '''
+    Funcion usada en SII
+    Lee los parametros de firma tomados desde el usuario corriente.
+    En formato PEM
+    Requiere la instalacion del addon user_signature_key
+    No incorporado en las dependencias deliberadamente
+    puesto que se pretende que la opcion de instalar el mismo sea provista
+    por el addon l10n_cl_base
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2016-06-01
+    '''
     def get_digital_signature_pem(self, comp_id):
         _logger.info(_('Executing digital signature function in PEM format'))
         _logger.info('Service provider for this company is %s' % comp_id)
@@ -359,8 +488,18 @@ version="1.0">
         else:
             return ''
 
+    '''
+    Funcion usada en SII
+    Lee los parametros de firma tomados desde el usuario corriente.
+    (la firma pura).
+    Requiere la instalacion del addon user_signature_key
+    No incorporado en las dependencias deliberadamente
+    puesto que se pretende que la opcion de instalar el mismo sea provista
+    por el addon l10n_cl_base
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2016-06-01
+    '''
     def get_digital_signature(self, comp_id):
-
         _logger.info(_('Executing digital signature function'))
         _logger.info('Service provider for this company is %s' % comp_id)
         if comp_id.dte_service_provider in ['SIIHOMO', 'SII']:
@@ -379,6 +518,13 @@ version="1.0">
         else:
             return ''
 
+    '''
+    Funcion usada en SII
+    Toma los datos referentes a la resolución SII que autoriza a
+    emitir DTE
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2016-06-01
+    '''
     def get_resolution_data(self, comp_id):
         _logger.info('Entering function get_resolution_data')
         _logger.info('Service provider for this company is %s' % comp_id.dte_service_provider)
@@ -387,6 +533,13 @@ version="1.0">
             'dte_resolution_number': comp_id.dte_resolution_number}
         return resolution_data
 
+    '''
+    Realización del envío de DTE.
+    La funcion selecciona el proveedor de servicio de DTE y efectua el envio
+    de acuerdo a la integracion del proveedor.
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2016-06-01
+    '''
     @api.multi
     def send_xml_file(self, envio_dte, inv):
         # seteo esta variable para saltear el proceso de envío masivo
@@ -564,16 +717,25 @@ NT 5.0; YComp 5.0.2.4)',
                 'Host': '{}'.format(url),
                 'Cookie': 'TOKEN = {}'.format(token)
             }
+
+            headers = urllib3.make_headers(
+
+                accept_encoding='gzip, deflate',
+                user_agent='Mozilla/4.0 (compatible; PROG 1.0; Windows \
+NT 5.0; YComp 5.0.2.4)',
+                )
+
             params =  collections.OrderedDict()
             params['rutSender'] = signature_d['subject_serial_number'][:8]
             params['dvSender'] = signature_d['subject_serial_number'][-1]
             params['rutCompany'] = inv.company_id.vat[2:-1]
             params['dvCompany'] = inv.company_id.vat[-1]
-            params['archivo'] = 'aca va envio_dte, pero no lo pongo para debug...'
-            print(params)
+            params['archivo'] = envio_dte
+            # print(params)
             print(headers)
             raise Warning('Fuck headerssss and parameterrsss!')
-            response = pool.request('POST', url, params, headers)
+            response = pool.request('POST', url+post, params, headers)
+            # response = pool.request('POST', url, params, headers)
             # response = pool.urlopen('POST', url + post,
             #                         headers=headers, body=envio_dte)
             print('response:')
@@ -592,7 +754,11 @@ NT 5.0; YComp 5.0.2.4)',
                 _logger.info(respuesta_dict['RECEPCIONDTE']['TRACKID'])
             return respuesta_dict
 
-    # funcion para descargar el XML
+    '''
+    Funcion para descargar el xml en el sistema local del usuario
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2016-05-01
+    '''
     @api.multi
     def get_xml_file(self):
         return {
@@ -602,10 +768,23 @@ NT 5.0; YComp 5.0.2.4)',
             'target': 'self',
         }
 
+    '''
+    Funcion para descargar el folio tomando el valor desde la secuencia
+    correspondiente al tipo de documento.
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2016-05-01
+    '''
     def get_folio(self, inv):
         # saca el folio directamente de la secuencia
         return inv.journal_document_class_id.sequence_id.number_next_actual
 
+    '''
+    Funcion usada en SII para toma de folio desde el archivo de folios (caf)
+    Requiere compatibilidad con el addon l10n_cl_dte_caf
+    No incluido en dependencias deliberadamente (manejo desde l10n_cl_base)
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2016-05-01
+    '''
     def get_caf_file(self, inv):
         # hay que buscar el caf correspondiente al comprobante,
         # trayendolo de la secuencia
@@ -648,15 +827,20 @@ www.sii.cl'''.format(folio, folio_inicial, folio_final)
             pass
         return returnvalue
 
+    '''
+    Funcion para reformateo del vat desde modo Odoo (dos digitos pais sin guion)
+    a valor sin puntuacion con guion
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2016-05-01
+    '''
     def format_vat(self, value):
         return value[2:10] + '-' + value[10:]
 
-    def convert_encoding(self, data, new_coding = 'UTF-8'):
-        encoding = cchardet.detect(data)['encoding']
-        if new_coding.upper() != encoding.upper():
-            data = data.decode(encoding, data).encode(new_coding)
-        return data
-
+    '''
+    Funcion creacion de imagen pdf417 basada en biblioteca elaphe
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2016-05-01
+    '''
     def pdf417bc(self, ted):
         _logger.info('Drawing the TED stamp in PDF417')
         bc = barcode(
@@ -674,11 +858,23 @@ www.sii.cl'''.format(folio, folio_inicial, folio_final)
         )
         return bc
 
+    '''
+    Funcion usada en SII
+    para firma del timbre (dio errores de firma para el resto de los doc)
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2015-03-01
+    '''
     def digest(self, data):
         sha1 = hashlib.sha1()
         sha1.update(data)
         return sha1.digest()
 
+    '''
+    Funcion usada en SII
+    para firma del timbre (dio errores de firma para el resto de los doc)
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2015-03-01
+    '''
     def signrsa(self, MESSAGE, KEY, digst=''):
         KEY = KEY.encode('ascii')
         rsa = M2Crypto.EVP.load_key_string(KEY)
@@ -702,7 +898,12 @@ exponent. AND DIGEST""")
                 'exponent': base64.b64encode(rsa_m.e),
                 'digest': base64.b64encode(self.digest(MESSAGE))}
 
-    # esta es la que estoy usando para firmar el CAF
+    '''
+    Funcion usada en SII
+    para firma del timbre (dio errores de firma para el resto de los doc)
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2015-03-01
+    '''
     def signmessage(self, MESSAGE, KEY, pubk='', digst=''):
         rsa = M2Crypto.EVP.load_key_string(KEY)
         rsa.reset_context(md='sha1')
@@ -725,6 +926,11 @@ exponent. AND DIGEST""")
                 'exponent': base64.b64encode(rsa_m.e),
                 'digest': base64.b64encode(self.digest(MESSAGE))}
 
+    '''
+    Definicion de extension de modelo de datos para account.invoice
+     @author: Daniel Blanco Martin (daniel[at]blancomartin.cl)
+     @version: 2015-02-01
+    '''
     sii_batch_number = fields.Integer(
         copy=False,
         string='Batch Number',
@@ -1089,8 +1295,24 @@ exponent. AND DIGEST""")
                 pass
 
             elif dte_service == 'LIBREDTE':
-                # servicio a realizar mediante sponsor
+                # directamente envio el diccionario dte
+                # funciones disponibles:
+                '''
+                Acciones posibles, aunque en esta funcion se hace solo el envio
+                    Consultar datos item
+                    Emitir DTE temporal sin folio y sin firma
+                    Generar DTE final a partir de DTE temporal y enviar al SII
+                    Consultar DTE emitido
+                    Obtener los datos de un DTE emitido
+                    Obtener el XML de un DTE emitido
+                    Actualizar el estado de un DTE emitido
+                    Cargar XML de un DTE emitido
+                    Búsqueda avanzada de DTEs emitidos
+                '''
                 pass
+
+
+
             # en caso que no sea DTE, el proceso es finalizado sin
             # consecuencias (llamando a super
             elif dte_service == 'SII MiPyme':
