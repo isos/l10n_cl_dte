@@ -7,6 +7,7 @@
 
 from openerp import fields, models, api, _
 from openerp.exceptions import Warning
+from openerp.exceptions import UserError
 from datetime import datetime, timedelta
 import logging
 import lxml.etree as etree
@@ -51,7 +52,7 @@ except:
     pass
 
 # from urllib3 import HTTPConnectionPool
-urllib3.disable_warnings()
+#urllib3.disable_warnings()
 pool = urllib3.PoolManager()
 # ca_certs = "/etc/ssl/certs/ca-certificates.crt"
 # pool = urllib3.PoolManager(cert_reqs='CERT_REQUIRED', ca_certs=ca_certs)
@@ -541,12 +542,15 @@ version="1.0">
      @version: 2016-06-01
     '''
     @api.multi
-    def send_xml_file(self, envio_dte, inv):
+    def send_xml_file(self, envio_dte=None, inv=None):
         # seteo esta variable para saltear el proceso de envío masivo
         # (esto es un envio con varios documentos)
         envio_masivo = False
 
         _logger.info('Entering Send XML Function')
+        if not self.company_id.dte_service_provider:
+            raise UserError(_("Not Service provider selected!"))
+            
         _logger.info(
             'Service provider is: %s' % self.company_id.dte_service_provider)
 
