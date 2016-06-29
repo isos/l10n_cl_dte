@@ -53,7 +53,7 @@ except:
 
 # from urllib3 import HTTPConnectionPool
 #urllib3.disable_warnings()
-pool = urllib3.PoolManager()
+pool = urllib3.PoolManager(timeout=30)
 # ca_certs = "/etc/ssl/certs/ca-certificates.crt"
 # pool = urllib3.PoolManager(cert_reqs='CERT_REQUIRED', ca_certs=ca_certs)
 
