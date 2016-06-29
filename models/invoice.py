@@ -704,57 +704,41 @@ encoding="ISO-8859-1"?>
             # port = 443
             # Armo el encabezado por separado para poder debuggear
             headers = {
-                'Accept': '''image/gif,image/x-xbitmap,\
-image/jpeg,image/pjpeg,application/vnd.ms-powerpoint,application/ms-excel,\
-application/msword,*/*''',
+                'Accept': 'image/gif, image/x-xbitmap, image/jpeg, image/pjpeg, application/vnd.ms-powerpoint, application/ms-excel, application/msword, */*',
                 'Accept-Language': 'es-cl',
                 'Accept-Encoding': 'gzip, deflate',
-                'Content-Type': 'multipart/form-data: boundary=-----------------9812634f1130lc4',
-                'charset': 'ISO-8859-1',
-                'User-Agent': 'Mozilla/4.0 (compatible; PROG 1.0; Windows \
-NT 5.0; YComp 5.0.2.4)',
-                'Content-Length': '{}'.format(len(envio_dte)),
+                'User-Agent': 'Mozilla/4.0 (compatible; PROG 1.0; Windows NT 5.0; YComp 5.0.2.4)',
                 'Referer': '{}'.format(self.company_id.website),
-                'Cache-Control': 'no-cache',
                 'Connection': 'Keep-Alive',
                 'Cache-Control': 'no-cache',
-                'Host': '{}'.format(url),
-                'Cookie': 'TOKEN = {}'.format(token)
+                'Cookie': 'TOKEN={}'.format(token),
             }
-
-            headers = urllib3.make_headers(
-
-                accept_encoding='gzip, deflate',
-                user_agent='Mozilla/4.0 (compatible; PROG 1.0; Windows \
-NT 5.0; YComp 5.0.2.4)',
-                )
-
-            params =  collections.OrderedDict()
+            params = collections.OrderedDict()
             params['rutSender'] = signature_d['subject_serial_number'][:8]
             params['dvSender'] = signature_d['subject_serial_number'][-1]
-            params['rutCompany'] = inv.company_id.vat[2:-1]
-            params['dvCompany'] = inv.company_id.vat[-1]
-            params['archivo'] = envio_dte
-            # print(params)
-            print(headers)
-            raise Warning('Fuck headerssss and parameterrsss!')
-            response = pool.request('POST', url+post, params, headers)
-            # response = pool.request('POST', url, params, headers)
-            # response = pool.urlopen('POST', url + post,
-            #                         headers=headers, body=envio_dte)
-            print('response:')
-            print(response.data)
-            print(response.status)
+            params['rutCompany'] = self.company_id.vat[2:-1]
+            params['dvCompany'] = self.company_id.vat[-1]
+            #@TODO Generar nombre de archivo envio
+            params['archivo'] = ('envioDTE.xml',envio_dte,"text/xml")
+
+            multi  = urllib3.filepost.encode_multipart_formdata(params)
+            _logger.info(multi)
+            headers.update({'Content-Length': '{}'.format(len(multi[0]))})
+            _logger.info("params %s",params)
+            _logger.info(headers)
+            response = pool.request_encode_body('POST', url+post, params, headers)
+            _logger.info('response: %s , status: %s', response.data,response.status)
             if response.status != 200:
-                raise Warning('Fuck response!')
+                raise Warning('¡Ha ocurrido un error!')
             respuesta_dict = xmltodict.parse(response.data)
-            print(respuesta_dict)
+            _logger.info("l733-dict respuesta")
+            _logger.info(respuesta_dict)
             if respuesta_dict['RECEPCIONDTE']['STATUS'] != '0':
-                print('status no es 0')
+                _logger.info('l736-status no es 0')
                 _logger.info(connection_status[
                     respuesta_dict['RECEPCIONDTE']['STATUS']])
             else:
-                print('status es 0')
+                _logger.info('l740-status es 0')
                 _logger.info(respuesta_dict['RECEPCIONDTE']['TRACKID'])
             return respuesta_dict
 
