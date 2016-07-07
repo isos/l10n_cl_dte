@@ -10,7 +10,8 @@ from openerp.exceptions import Warning
 from openerp.exceptions import UserError
 from datetime import datetime, timedelta
 import logging
-import lxml.etree as etree
+from lxml import etree
+from lxml.etree import Element, SubElement
 from lxml import objectify
 from lxml.etree import XMLSyntaxError
 from openerp import SUPERUSER_ID
@@ -60,6 +61,7 @@ pool = urllib3.PoolManager(timeout=30)
 # from inspect import currentframe, getframeinfo
 # estas 2 lineas son para imprimir el numero de linea del script
 # (solo para debug)
+import textwrap
 
 _logger = logging.getLogger(__name__)
 
@@ -414,50 +416,62 @@ version="1.0">
      @version: 2016-06-01
     '''
     def sign_full_xml(self, message, privkey, cert, uri, type='doc'):
-        print('mensaje de entrada: %s' % type)
-        print(message)
-
+        _logger.info('mensaje de entrada: %s' % type)
         doc = etree.fromstring(message)
-
-        signed_node = xmldsig(
-            doc, digest_algorithm=u'sha1').sign(
-            method=methods.detached, algorithm=u'rsa-sha1',
-            c14n_algorithm=u'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
-            reference_uri='#'+uri,
-            key=privkey.encode('ascii'))
-
-        Transforms = '''<Transforms>
-        <Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
-      </Transforms>'''
-        x509certificate = '''
-    <X509Data>
-      <X509Certificate>
-{}</X509Certificate>
-</X509Data>'''.format(cert)
-        msg = etree.tostring(signed_node, pretty_print=True)
-        # separo las adaptaciones que le hago a la firma
-        # para poder administrarlas
-        # mas facil primero: eliminar los indents
-        # despues:  agregar el certificado
-        # despues indicar o no el transform....
-        # despues limpiar los ds...
-        msg = self.remove_indents(msg)
-        msg = msg.replace('</ds:KeyValue>', '</ds:KeyValue>{}'.format(x509certificate))
-        # msg = msg.replace('<ds:DigestMethod ', Transforms + '<ds:DigestMethod ')
-        msg = msg.replace('ds:', '').replace(':ds=', '=')
-        print('firma......')
-        print(msg)
-        print('validacion de firma......')
+        string = etree.tostring(doc[0])
+        mess = etree.tostring(etree.fromstring(string), method="c14n")
+        digest = base64.b64encode(self.digest(mess))
+        reference_uri='#'+uri
+        signed_info = Element("SignedInfo")
+        c14n_method = SubElement(signed_info, "CanonicalizationMethod", Algorithm='http://www.w3.org/TR/2001/REC-xml-c14n-20010315')
+        sign_method = SubElement(signed_info, "SignatureMethod", Algorithm='http://www.w3.org/2000/09/xmldsig#rsa-sha1')
+        reference = SubElement(signed_info, "Reference", URI=reference_uri)
+        transforms = SubElement(reference, "Transforms")
+        SubElement(transforms, "Transform", Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315")
+        digest_method = SubElement(reference, "DigestMethod", Algorithm="http://www.w3.org/2000/09/xmldsig#sha1")
+        digest_value = SubElement(reference, "DigestValue")
+        digest_value.text = digest
+        signed_info_c14n = etree.tostring(signed_info,method="c14n",exclusive=False,with_comments=False,inclusive_ns_prefixes=None)
+        if type == 'doc':
+            att = 'xmlns="http://www.w3.org/2000/09/xmldsig#"'
+        else:
+            att = 'xmlns="http://www.w3.org/2000/09/xmldsig#" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
+        #@TODO Find better way to add xmlns:xsi attrib
+        signed_info_c14n = signed_info_c14n.replace("<SignedInfo>","<SignedInfo " + att + ">")
+        sig_root = Element("Signature",attrib={'xmlns':'http://www.w3.org/2000/09/xmldsig#'})
+        sig_root.append(etree.fromstring(signed_info_c14n))
+        signature_value = SubElement(sig_root, "SignatureValue")
+        from cryptography.hazmat.backends import default_backend
+        from cryptography.hazmat.primitives.serialization import load_pem_private_key
+        import OpenSSL
+        from OpenSSL.crypto import *
+        type_ = FILETYPE_PEM
+        key=OpenSSL.crypto.load_privatekey(type_,privkey.encode('ascii'))
+        signature= OpenSSL.crypto.sign(key,signed_info_c14n,'sha1')
+        signature_value.text =textwrap.fill(base64.b64encode(signature),64)
+        key_info = SubElement(sig_root, "KeyInfo")
+        key_value = SubElement(key_info, "KeyValue")
+        rsa_key_value = SubElement(key_value, "RSAKeyValue")
+        modulus = SubElement(rsa_key_value, "Modulus")
+        key = load_pem_private_key(privkey.encode('ascii'),password=None, backend=default_backend())
+        modulus.text =  textwrap.fill(base64.b64encode(self.long_to_bytes(key.public_key().public_numbers().n)),64)
+        exponent = SubElement(rsa_key_value, "Exponent")
+        exponent.text = self.ensure_str(base64.b64encode(self.long_to_bytes(key.public_key().public_numbers().e)))
+        x509_data = SubElement(key_info, "X509Data")
+        x509_certificate = SubElement(x509_data, "X509Certificate")
+        x509_certificate.text = '\n'+textwrap.fill(cert,64)
+        msg = etree.tostring(sig_root)
+        _logger.info('firma......')
+        _logger.info(msg)
+        _logger.info('validacion de firma......')
         msg = msg if self.xml_validator(msg, 'sig') else ''
-
         if type=='doc':
             fulldoc = self.create_template_doc1(message, msg)
-        elif type=='env':
-            fulldoc = self.create_template_env1(message, msg)
-
-        print('documento de salida: %s' % type)
-        print(fulldoc)
-        print('entro a validacion: %s' % type)
+        if type=='env':
+            fulldoc = self.create_template_env1(message,msg)
+        _logger.info('documento de salida: %s' % type)
+        _logger.info(fulldoc)
+        _logger.info('entro a validacion: %s' % type)
         fulldoc = fulldoc if self.xml_validator(fulldoc, type) else ''
         return fulldoc
 
@@ -846,6 +860,44 @@ www.sii.cl'''.format(folio, folio_inicial, folio_final)
         )
         return bc
 
+    """Fom xmldisg library"""
+    def ensure_str(self,x, encoding="utf-8", none_ok=False):
+        if none_ok is True and x is None:
+            return x
+        if not isinstance(x, str):
+            x = x.decode(encoding)
+        return x
+        
+    def long_to_bytes(self, n, blocksize=0):
+        """long_to_bytes(n:long, blocksize:int) : string
+        Convert a long integer to a byte string.
+        If optional blocksize is given and greater than zero, pad the front of the
+        byte string with binary zeros so that the length is a multiple of
+        blocksize.
+        """
+        # after much testing, this algorithm was deemed to be the fastest
+        s = b''
+        n = long(n)  # noqa
+        import struct
+        pack = struct.pack
+        while n > 0:
+            s = pack(b'>I', n & 0xffffffff) + s
+            n = n >> 32
+        # strip off leading zeros
+        for i in range(len(s)):
+            if s[i] != b'\000'[0]:
+                break
+        else:
+            # only happens when n == 0
+            s = b'\000'
+            i = 0
+        s = s[i:]
+        # add back some pad bytes.  this could be done more efficiently w.r.t. the
+        # de-padding being done above, but sigh...
+        if blocksize > 0 and len(s) % blocksize:
+            s = (blocksize - len(s) % blocksize) * b'\000' + s
+        return s
+
     '''
     Funcion usada en SII
     para firma del timbre (dio errores de firma para el resto de los doc)
@@ -853,8 +905,7 @@ www.sii.cl'''.format(folio, folio_inicial, folio_final)
      @version: 2015-03-01
     '''
     def digest(self, data):
-        sha1 = hashlib.sha1()
-        sha1.update(data)
+        sha1 = hashlib.new('sha1', data)
         return sha1.digest()
 
     '''
