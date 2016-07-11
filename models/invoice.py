@@ -1238,13 +1238,12 @@ exponent. AND DIGEST""")
 
             # agrego el timbre en caso que sea para el SII
             if dte_service in ['SII', 'SIIHOMO']:
-                # time = '<TmstFirma>{}</TmstFirma>'.format(
-                #     datetime.strftime(datetime.now(), '%Y-%m-%dT%H:%M:%S'))
-
-                time = '<TmstFirma>{}</TmstFirma>'.format(self.convert_timezone(
+                timestamp = self.convert_timezone(
                         datetime.strftime(datetime.now(), '%Y-%m-%d'),
                         datetime.strftime(datetime.now(), '%H:%M:%S')).strftime(
-                        '%Y-%m-%dT%H:%M:%S'))
+                        '%Y-%m-%dT%H:%M:%S')
+                time = '<TmstFirma>{}</TmstFirma>'.format(timestamp)
+                ted1 = ted1.replace('2014-04-24T12:02:20', timestamp)
 
                 xml = xml.replace('<TEDd>TEDTEDTED</TEDd>', ted1 + time)
 
