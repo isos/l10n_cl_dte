@@ -1085,7 +1085,11 @@ exponent. AND DIGEST""")
             ##
             # formateo sin remover indents
             ddxml = etree.tostring(root)
-
+            timestamp = self.convert_timezone(
+                    datetime.strftime(datetime.now(), '%Y-%m-%d'),
+                    datetime.strftime(datetime.now(), '%H:%M:%S')).strftime(
+                    '%Y-%m-%dT%H:%M:%S')
+            ddxml = ddxml.replace('2014-04-24T12:02:20', timestamp)
             frmt = inv.signmessage(ddxml, keypriv, keypub)['firma']
             ted = (
                 '''<TED version="1.0">{}<FRMT algoritmo="SHA1withRSA">{}\
@@ -1101,6 +1105,8 @@ exponent. AND DIGEST""")
                 image.save(barcodefile,'PNG')
                 data = barcodefile.getvalue()
                 inv.sii_barcode_img = base64.b64encode(data)
+            ted  = ted + '<TmstFirma>{}</TmstFirma>'.format(timestamp)
+            
         return ted
 
     @api.multi
@@ -1238,14 +1244,7 @@ exponent. AND DIGEST""")
 
             # agrego el timbre en caso que sea para el SII
             if dte_service in ['SII', 'SIIHOMO']:
-                timestamp = self.convert_timezone(
-                        datetime.strftime(datetime.now(), '%Y-%m-%d'),
-                        datetime.strftime(datetime.now(), '%H:%M:%S')).strftime(
-                        '%Y-%m-%dT%H:%M:%S')
-                time = '<TmstFirma>{}</TmstFirma>'.format(timestamp)
-                ted1 = ted1.replace('2014-04-24T12:02:20', timestamp)
-
-                xml = xml.replace('<TEDd>TEDTEDTED</TEDd>', ted1 + time)
+                xml = xml.replace('<TEDd>TEDTEDTED</TEDd>', ted1)
 
             root = etree.XML( xml )
             # xml_pret = self.remove_indents(
