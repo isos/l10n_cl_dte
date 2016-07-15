@@ -21,6 +21,8 @@
                                 class="oe_highlight" attrs="{'invisible':[
                                     ('state', 'in', ['draft']),
                                     ('sii_result', 'not in', ['NoEnviado'])]}"/>
+                            <button string="Ask for DTE" type="object" name="ask_for_dte_status"
+                                        class="oe_highlight" attrs="{'readonly':[('sii_result','in',['','NoEnviado','Proceso'])],'invisible':[('state', 'in', ['draft']),('sii_result','in',['','NoEnviado'])]}"/>
                             <field name='sii_result' widget="statusbar"/>
                         </header>
                         <group>
