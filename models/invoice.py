@@ -125,7 +125,7 @@ afeqWjiRVMvV4+s4Q==</FRMA></CAF><TSTED>2014-04-24T12:02:20</TSTED></DD>\
 fHlAa7j08Xff95Yb2zg31sJt6lMjSKdOK+PQp25clZuECig==</FRMT></TED>"""
 result = xmltodict.parse(timbre)
 
-server_url = 'https://maullin.sii.cl/DTEWS/'
+server_url = {'SIIHOMO':'https://maullin.sii.cl/DTEWS/','SII':'https://palena.sii.cl/DTEWS/'}
 
 BC = '''-----BEGIN CERTIFICATE-----\n'''
 EC = '''\n-----END CERTIFICATE-----\n'''
@@ -287,8 +287,8 @@ class invoice(models.Model):
      @version: 2015-04-01
     '''
     def get_seed(self):
-        url = server_url + 'CrSeed.jws?WSDL'
-        ns = 'urn:'+server_url + 'CrSeed.jws'
+        url = server_url[self.company_id.dte_service_provider] + 'CrSeed.jws?WSDL'
+        ns = 'urn:'+server_url[self.company_id.dte_service_provider] + 'CrSeed.jws'
         _server = SOAPProxy(url, ns)
         root = etree.fromstring(_server.getSeed())
         semilla = root[0][0].text
@@ -391,8 +391,8 @@ version="1.0">
      @version: 2016-06-01
     '''
     def get_token(self, seed_file):
-        url = server_url + 'GetTokenFromSeed.jws?WSDL'
-        ns = 'urn:'+ server_url +'GetTokenFromSeed.jws'
+        url = server_url[self.company_id.dte_service_provider] + 'GetTokenFromSeed.jws?WSDL'
+        ns = 'urn:'+ server_url[self.company_id.dte_service_provider] +'GetTokenFromSeed.jws'
         _server = SOAPProxy(url, ns)
         tree = etree.fromstring(seed_file)
         ss = etree.tostring(tree, pretty_print=True, encoding='iso-8859-1')
@@ -713,7 +713,9 @@ encoding="ISO-8859-1"?>
 
             ########### inicio del bloque de envio #############
             ###
-            url = 'https://maullin.sii.cl'
+            url = 'https://palena.sii.cl'
+            if self.company_id.dte_service_provider == 'SIIHOMO':
+                url = 'https://maullin.sii.cl'
             post = '/cgi_dte/UPL/DTEUpload'
             # port = 443
             # Armo el encabezado por separado para poder debuggear
