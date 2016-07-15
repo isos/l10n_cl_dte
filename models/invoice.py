@@ -1042,18 +1042,19 @@ exponent. AND DIGEST""")
         for inv in self:
             ted = False
             folio = self.get_folio(inv)
-
             result['TED']['DD']['RE'] = inv.format_vat(inv.company_id.vat)
             result['TED']['DD']['TD'] = inv.sii_document_class_id.sii_code
             result['TED']['DD']['F']  = folio
             result['TED']['DD']['FE'] = inv.date_invoice
+            if not inv.partner_id.vat:
+                raise UserError(_("Fill Partner VAT"))
             result['TED']['DD']['RR'] = inv.format_vat(inv.partner_id.vat)
             result['TED']['DD']['RSR'] = (inv.partner_id.name[:40]).decode(
                 'utf-8')
             result['TED']['DD']['MNT'] = int(inv.amount_total)
 
-            for line in inv.invoice_line:
-                result['TED']['DD']['IT1'] = line.name.decode('utf-8')
+            for line in inv.invoice_line_ids:
+                result['TED']['DD']['IT1'] = line.name[:40].decode('utf-8')
                 break
 
             resultcaf = self.get_caf_file(inv)
@@ -1108,7 +1109,6 @@ exponent. AND DIGEST""")
                 data = barcodefile.getvalue()
                 inv.sii_barcode_img = base64.b64encode(data)
             ted  = ted + '<TmstFirma>{}</TmstFirma>'.format(timestamp)
-            
         return ted
 
     @api.multi
@@ -1140,6 +1140,8 @@ exponent. AND DIGEST""")
             if dte_service in ['SII', 'SIIHOMO']:
                 # debe confeccionar el timbre
                 ted1 = self.get_barcode(dte_service)
+                ted_dict = xmltodict.parse('<TED>' + ted1 + '</TED>')
+                folio = ted_dict['TED']['TED']['DD']['F']
 
             elif dte_service in ['EFACTURADELSUR']:
                 # debe utilizar usuario y contraseña
@@ -1179,7 +1181,10 @@ exponent. AND DIGEST""")
 
             # _logger.info(invoice_lines)
             #########################
-            folio = self.get_folio(inv)
+            # genero un nuevo Folio para el caso de que no venga desde barcode
+            if dte_service not in ['SII', 'SIIHOMO']:
+                folio = self.get_folio(inv)
+            inv.sii_document_number = folio
             dte = collections.OrderedDict()
             dte1 = collections.OrderedDict()
 
@@ -1244,7 +1249,7 @@ exponent. AND DIGEST""")
                 dte1, root=False, attr_type=False).replace(
                     '<item>','').replace('</item>','')
 
-            # agrego el timbre en caso que sea para el SII
+            # agrego el time en caso que sea para el SII
             if dte_service in ['SII', 'SIIHOMO']:
                 xml = xml.replace('<TEDd>TEDTEDTED</TEDd>', ted1)
 
