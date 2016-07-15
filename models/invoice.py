@@ -1362,3 +1362,66 @@ exponent. AND DIGEST""")
                 pass
             else:
                 _logger.info('NO HUBO NINGUNA OPCION DTE VALIDA')
+
+    def _get_send_status(self, track_id, signature_d,token):
+        url = server_url[self.company_id.dte_service_provider] + 'QueryEstUp.jws?WSDL'
+        ns = 'urn:'+ server_url[self.company_id.dte_service_provider] + 'QueryEstUp.jws'
+        _server = SOAPProxy(url, ns)
+        respuesta = _server.getEstUp(signature_d['subject_serial_number'][:8],signature_d['subject_serial_number'][-1],track_id,token)
+        self.sii_message = respuesta
+        resp = xmltodict.parse(respuesta)
+        _logger.info(resp)
+        status = False
+        if resp['SII:RESPUESTA']['SII:RESP_HDR']['ESTADO'] == "-11":
+            status =  {'warning':{'title':_('Error -11'), 'message': _("Error -11: Espere a que sea aceptado por el SII, intente en 5s más")}}
+        if resp['SII:RESPUESTA']['SII:RESP_HDR']['ESTADO'] == "EPR":
+            self.sii_result = "Proceso"
+            if resp['SII:RESPUESTA']['SII:RESP_BODY']['RECHAZADOS'] == "1":
+                self.sii_result = "Rechazado"
+        elif resp['SII:RESPUESTA']['SII:RESP_HDR']['ESTADO'] == "RCT":
+            self.sii_result = "Rechazado"
+            status = {'warning':{'title':_('Error RCT'), 'message': _(resp['SII:RESPUESTA']['GLOSA'])}}
+        return status
+
+    def _get_dte_status(self, signature_d, token):
+        url = server_url[self.company_id.dte_service_provider] + 'QueryEstDte.jws?WSDL'
+        ns = 'urn:'+ server_url[self.company_id.dte_service_provider] + 'QueryEstDte.jws'
+        _server = SOAPProxy(url, ns)
+        receptor = self.format_vat(self.partner_id.vat)
+        date_invoice = datetime.strptime(self.date_invoice, "%Y-%m-%d").strftime("%d-%m-%Y")
+        respuesta = _server.getEstDte(signature_d['subject_serial_number'][:8], str(signature_d['subject_serial_number'][-1]),
+                self.company_id.vat[2:-1],self.company_id.vat[-1], receptor[:8],receptor[2:-1],str(self.sii_document_class_id.sii_code), str(self.sii_document_number),
+                date_invoice, str(self.amount_total),token)
+        self.sii_message = respuesta
+        resp = xmltodict.parse(respuesta)
+        if resp['SII:RESPUESTA']['SII:RESP_HDR']['ESTADO'] == '2':
+        	status = {'warning':{'title':_("Error code: 2"), 'message': _(resp['SII:RESPUESTA']['SII:RESP_HDR']['GLOSA'])}}
+        	return status
+        if resp['SII:RESPUESTA']['SII:RESP_HDR']['ESTADO'] == "EPR":
+            self.sii_result = "Proceso"
+            if resp[0][1][3] == "1":
+                self.sii_result = "Rechazado"
+            if resp[0][1][4] == "1":
+                self.sii_result = "Reparo"
+        elif resp['SII:RESPUESTA']['SII:RESP_HDR']['ESTADO'] == "RCT":
+            self.sii_result = "Rechazado"
+
+    @api.multi
+    def ask_for_dte_status(self):
+        try:
+            signature_d = self.get_digital_signature_pem(
+                self.company_id)
+            seed = self.get_seed()
+            template_string = self.create_template_seed(seed)
+            seed_firmado = self.sign_seed(
+                template_string, signature_d['priv_key'],
+                signature_d['cert'])
+            token = self.get_token(seed_firmado)
+        except:
+            raise Warning(connection_status[response.e])
+        xml_response = xmltodict.parse(self.sii_xml_response)
+        if self.sii_result == 'Enviado':
+            status = self._get_send_status(self.sii_send_ident, signature_d, token)
+            if self.sii_result != 'Proceso':
+                return status
+        self._get_dte_status(signature_d, token)
