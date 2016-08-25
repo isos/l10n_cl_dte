@@ -13,6 +13,20 @@
                 </field>
  
                 <notebook>
+                    <page string="Invoice References" name="invoice_references">
+                        <field name="ref_document_ids"
+                               options="{'limit': 10, 'create': false, 'create_edit': false}"
+                               attrs="{'readonly':[('state', 'not in', 'draft')]}">
+                            <tree string="Document References" editable="bottom">
+                                <field name="sii_document_class_id"/>
+                                <field name="prefix"/>
+                                <field name="name"/>
+                                <field name="reference_date"/>
+                                <field name="codref"/>
+                                <field name="reason"/>
+                            </tree>
+                        </field>
+                    </page>
                     <page string="Electronic Invoice" name="electronic_invoice">
                         <header>
                             <div attrs="{'invisible':[
@@ -105,6 +119,7 @@
                             </div>
                         </div>
                     </page>
+
                 </notebook>
             </field>
         </record>

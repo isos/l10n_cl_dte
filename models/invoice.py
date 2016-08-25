@@ -4,7 +4,7 @@
 # directory
 ##############################################################################
 from openerp import fields, models, api, _
-from openerp.exceptions import Warning
+from openerp.exceptions import Warning as UserError
 import logging, json
 import lxml.etree as etree
 from lxml import objectify
@@ -232,7 +232,7 @@ Linux/3.13.0-88-generic'
                 return True
             except XMLSyntaxError as e:
                 _logger.info(_("The Document XML file has error: %s") % e.args)
-                raise Warning(_('XML Malformed Error %s') % e.args)
+                raise UserError(_('XML Malformed Error %s') % e.args)
 
     '''
     obtener estado de DTE.
@@ -283,7 +283,7 @@ xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
             _logger.info(response.data)
             if response.status != 200:
                 pass
-                raise Warning(
+                raise UserError(
                     'The Transmission Has Failed. Error: %s' % response.status)
 
             setenvio = {
@@ -291,12 +291,12 @@ xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
                 'sii_xml_response1': response.data}
             self.write(setenvio)
             x = xmltodict.parse(response.data)
-            raise Warning(x['soap:Envelope']['soap:Body'][
+            raise UserError(x['soap:Envelope']['soap:Body'][
                               'ObtenerEstadoDTEResponse'][
                               'ObtenerEstadoDTEResult'])
 
             root = etree.fromstring(response.data)
-            raise Warning(root.ObtenerEstadoDTEResult)
+            raise UserError(root.ObtenerEstadoDTEResult)
 
         elif self.dte_service_provider in [
             'LIBREDTE', 'LIBREDTE_TEST']:
@@ -319,7 +319,7 @@ xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
                 headers=headers)
 
             if response_status.status != 200:
-                raise Warning(
+                raise UserError(
                     'Error al obtener el estado del DTE emitido: {}'.format(
                         response_status.data))
             _logger.info('Se recibió una respuesta:')
@@ -333,7 +333,7 @@ xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
                 response_status_j['revision_detalle'] == 'DTE aceptado':
                 resultado_status = 'Aceptado'
             elif response_status_j['revision_estado'] == '-11':
-                raise Warning('Atención: Revisión en Proceso')
+                raise UserError('Atención: Revisión en Proceso')
             elif response_status_j['revision_estado'] in [
                 'RCH - DTE Rechazado', 'RFR - Rechazado por Error en Firma']:
                 resultado_status = 'Rechazado'
@@ -389,7 +389,7 @@ xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
             _logger.info(response.status)
             _logger.info(response.data)
             if response.status != 200:
-                raise Warning(
+                raise UserError(
                     'The Transmission Has Failed. Error: %s' % response.status)
             setenvio = {
                 'sii_result': 'Enviado' if self.dte_service_provider == 'EFACTURADELSUR' else self.sii_result,
@@ -445,7 +445,7 @@ xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
      @version: 2016-05-01
     '''
     def get_company_dte_service_provider(self):
-        # raise Warning(self.company_id.dte_service_provider)
+        # raise UserError(self.company_id.dte_service_provider)
         return self.company_id.dte_service_provider
 
     '''
@@ -545,10 +545,18 @@ xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
         #default=get_company_dte_service_provider,
         readonly=True)
 
+    # estas referencias existen de la versión anterior (8.0.1.3)
+    # ToDO: quitarlas para que se reemplacen totalmente por campos referenciales
     sii_referencia_TpoDocRef = fields.Char('TpoDocRef')
     sii_referencia_FolioRef =  fields.Char('FolioRef')
     sii_referencia_FchRef = fields.Char('FchRef')
     sii_referencia_CodRef = fields.Char('CodRef')
+
+    # campos nuevos para incluir referencias relacionales
+    # (para no tener un limiteen la cantidad de referencias al documento)
+    # ver la nueva clase que se agrega (referencias)
+    ref_document_ids = fields.One2many(
+        'invoice.reference', 'invoice_id', string='Document References')
 
     dte_resolution_number = fields.Char('SII Exempt Resolution Number',
                                         help='''This value must be provided \
@@ -585,14 +593,14 @@ stamp to be legally valid.''')
             'POST', api_generar, headers=headers,
             body=response_emitir_data)
         if response_generar.status != 200:
-            raise Warning('Error en conexión al generar: %s, %s' % (
+            raise UserError('Error en conexión al generar: %s, %s' % (
                 response_generar.status, response_generar.data))
         _logger.info('response_generar: %s' % response_generar.data)
         self.sii_xml_response1 = response_emitir_data
         try:
             response_j = json.loads(response_generar.data)
         except:
-            raise Warning('LibreDTE No pudo generar el XML.\n'
+            raise UserError('LibreDTE No pudo generar el XML.\n'
                 'Reintente en un instante. \n{}'.format(
                 response_generar.data))
         _logger.info(response_j)
@@ -669,7 +677,7 @@ stamp to be legally valid.''')
             'POST', api_gen_pdf,  headers=headers,
             body=generar_pdf_request)
         if response_pdf.status != 200:
-            raise Warning('Error en conexión al generar: %s, %s' % (
+            raise UserError('Error en conexión al generar: %s, %s' % (
                 response_pdf.status, response_pdf.data))
         invoice_pdf = base64.b64encode(response_pdf.data)
         attachment_obj = self.env['ir.attachment']
@@ -849,7 +857,7 @@ stamp to be legally valid.''')
             # todo: forma de pago y fecha de vencimiento - opcional
             dte['Encabezado']['IdDoc']['FmaPago'] = inv.payment_term.dte_sii_code or 1
             if inv.date_due < inv.date_invoice:
-                raise Warning(
+                raise UserError(
                     'LA FECHA DE VENCIMIENTO NO PUEDE SER ANTERIOR A LA DE \
 FACTURACION: Fecha de Facturación: {}, Fecha de Vencimiento {}'.format(
                         inv.date_invoice, inv.date_due))
@@ -883,7 +891,7 @@ FACTURACION: Fecha de Facturación: {}, Fecha de Vencimiento {}'.format(
             dte['Encabezado']['Receptor']['DirRecep'] = self.char_replace(inv.partner_id.street)
             # todo: revisar comuna: "false"
             if inv.partner_id.state_id.name == False or inv.partner_id.city == False:
-                raise Warning('No se puede continuar: Revisar comuna y ciudad')
+                raise UserError('No se puede continuar: Revisar comuna y ciudad')
             dte['Encabezado']['Receptor']['CmnaRecep'] = self.char_replace(inv.partner_id.state_id.name)
             dte['Encabezado']['Receptor']['CiudadRecep'] = self.char_replace(inv.partner_id.city)
             if inv.dte_service_provider not in ['LIBREDTE', 'LIBREDTE_TEST']:
@@ -983,13 +991,13 @@ xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
                 _logger.info('DTE enviado (json)')
                 _logger.info(json.dumps(dte))
                 # corte para debug
-                # raise Warning('dictionary generated')
+                # raise UserError('dictionary generated')
                 if inv.sii_xml_response1 == False:
                     response_emitir = pool.urlopen(
                         'POST', api_emitir, headers=headers, body=json.dumps(dte))
 
                     if response_emitir.status != 200:
-                        raise Warning('Error en conexión al emitir: %s, %s' % (
+                        raise UserError('Error en conexión al emitir: %s, %s' % (
                             response_emitir.status, response_emitir.data))
                     _logger.info('response_emitir: %s' % response_emitir.data)
 
@@ -1035,7 +1043,73 @@ xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
                     }
                 )
                 _logger.info('se guardó xml con la factura')
+            # incorporo facturacion.cl
+            elif inv.dte_service_provider == 'FACTURACION':
+                envelope_efact = '''<?xml version="1.0" encoding="ISO-8859-1"?>
+{}'''.format(self.convert_encoding(xml_pret, 'ISO-8859-1'))
+                inv.sii_xml_request = envelope_efact
+                self.get_xml_file()
             else:
                 _logger.info('NO HUBO NINGUNA OPCION DTE VALIDA ({})'.format(
                     inv.dte_service_provider))
-                raise Warning('None DTE Provider Option')
+                raise UserError('None DTE Provider Option')
+
+
+class invoiceReference(models.Model):
+    _name = "invoice.reference"
+    '''
+    C<NroLinRef> ordinal. No se incluye. Se debe calcular al crear el diccionario
+    C<TpoDocRef> i.sii_document_class_id.sii_code
+    *<FolioRef>  name
+    *<FchRef>	reference_date
+    *<CodRef>    codref
+    *<RazonRef>  reason
+    N<RUTOtr>    no implementado (por ahora)
+    N<IdAdicOtr> no implementado (por ahora)
+    N<IndGlobal> no se incluye
+    '''
+
+    # Esta Factura
+    invoice_id = fields.Many2one(
+        'account.invoice', 'Invoice',
+        required=True, ondelete='cascade', select=True, readonly=True)
+    # FolioRef
+    name = fields.Char(
+        'Number', required=True, readonly=False,
+        help='Number (folio) of reference')
+    sii_document_class_id = fields.Many2one(
+        'sii.document_class', 'Ref Document',
+        required=True, ondelete='cascade')
+    # FchRef
+    reference_date = fields.Date(
+        'Ref. Date', required=True, help="FchRef")
+    # si no hay un document class, puede tomar de éste (no implementado)
+    # por ejemplo "SET" para set de pruebas <TipoDocRef>
+    # si existe un sii_code toma el sii code. si no existe, lo tiene que tomar
+    # desde acá. (la idea es que todos los posibles existan en el modelo
+    # sii.document_class)
+    prefix = fields.Char(
+        'Prefix', compute='_compute_ref' ,readonly=True,
+        help="<TipoDocRef>. Should be SII Code for docs, or this prefix if \
+does not exist.")
+    # CodRef.. se usa solo si el doc principal es nota de credito o débito
+    codref = fields.Char('Cod.Ref', readonly=True, help="<CodRef>, Only \
+needed for credit notes and debit notes.")
+    # RazonRef "descuento por pronto pago" o "error en precio"
+    reason = fields.Char('Reason', help="Related to <RazonRef>.")
+
+    #doc_princ_sii_code = fields.Integer('Documento Principal', compute='')
+
+
+    @api.multi
+    @api.depends('sii_document_class_id')
+    def _compute_ref(self):
+        for i in self:
+            # _logger.info(
+            #     'documento principal: {}'.format(
+            #         i.invoice_id.journal_document_class_id.sii_code))
+            if i.sii_document_class_id.id != False:
+                _logger.info(
+                'pasa por la funcion compute_ref: {}'.format(
+                    i.sii_document_class_id.doc_code_prefix))
+                i.prefix = i.sii_document_class_id.doc_code_prefix

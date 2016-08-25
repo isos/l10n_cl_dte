@@ -9,7 +9,7 @@ from openerp.exceptions import Warning
 
 _logger = logging.getLogger(__name__)
 
-class account_invoice_dte_status(models.TransientModel):
+class accountInvoiceDTEStatus(models.TransientModel):
 
     _name = 'account.invoice.dte_status'
 

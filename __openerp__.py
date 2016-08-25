@@ -22,7 +22,7 @@
 {
     "name": """Chile - Web Services de Documentos Tributarios Electrónicos\
     """,
-    'version': '8.0.1.3.2',
+    'version': '8.0.1.4.0',
     'category': 'Localization/Chile',
     'sequence': 12,
     'author':  'Blanco Martín & Asociados',
@@ -50,7 +50,7 @@ Chile: API and GUI to access Electronic Invoicing webservices.
         'views/invoice_view.xml',
         'views/partner_view.xml',
         'views/company_view.xml',
-        'views/payment_t_view.xml',
+        #'views/payment_t_view.xml',
         'views/sii_regional_offices_view.xml',
         'views/invoice_template.xml',
         'data/sii.regional.offices.csv',
