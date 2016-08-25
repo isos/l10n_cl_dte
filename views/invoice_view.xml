@@ -50,7 +50,8 @@
                                     }"/>
                                 <button string="Check DTE Status" type="object" name="check_dte_status"
                                     attrs="{'invisible':[
-                                        ('sii_result', 'in', 'Enviado')
+                                        ('sii_result', 'in', 'Enviado'),
+                                        ('dte_service_provider', 'in', ['FACTURACION'])
                                     ]
                                     }"/>
                                 <button string="Bring PDF DTE" type="object"
